@@ -1,0 +1,28 @@
+{
+  "name": "chen2025_hk_covid",
+  "disease": "COVID-19",
+  "citation_short": "Chen Nat Commun 2025 (HK)",
+  "source": {
+    "type": "path",
+    "value": "./data/delay_distributions/HK-settings-specific/linelist_ref.rda"
+  },
+  "format": "rda",
+  "linelist": true,
+  "meta": {
+    "location": "Hong Kong",
+    "data_availability": "GitHub DxChen0126/HK-setting-specific (anonymized)."
+  },
+  "delay_definitions": [
+    {
+      "name": "symptom_onset_to_report",
+      "start_col": "date_symptom_onset",
+      "end_col": "date_case_report"
+    }
+  ],
+  "read_options": {},
+  "column_overrides": {
+    "Onset date": "date_symptom_onset",
+    "Report date": "date_report"
+  },
+  "auxiliary_columns": {}
+}

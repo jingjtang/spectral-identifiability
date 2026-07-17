@@ -1,0 +1,9 @@
+{
+  "standard_columns": [
+    "case_id", "age", "sex", "location", "n_samples",
+    "date_exposure_start", "date_exposure_end",
+    "date_symptom_onset", "date_first_visit", "date_hosp_admission",
+    "date_icu_admission", "date_death", "date_discharge",
+    "date_specimen", "date_test_result", "date_case_report", "date_death_report"
+  ]
+}

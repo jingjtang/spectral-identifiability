@@ -1,0 +1,36 @@
+{
+  "name": "hawryluk_brazil_covid",
+  "disease": "COVID-19",
+  "citation_short": "hawryluk_brazil_covid",
+  "source": {
+    "type": "url",
+    "value": "https://raw.githubusercontent.com/ihawryluk/GP_nowcasting/refs/heads/main/data/df_SIVEP_nowcast_Brazil_31-05-2021.csv"
+  },
+  "format": "csv",
+  "linelist": true,
+  "meta": {
+    "location": "Brazil",
+    "data_availability": "Gaussian process nowcasting: application to COVID-19 mortality reporting"
+  },
+  "delay_definitions": [
+    {
+      "name": "death_onset_to_report",
+      "start_col": "date_death",
+      "end_col": "date_death_report"
+    }
+  ],
+  "read_options": {
+    "encoding": "utf-8"
+  },
+  "preprocess": {
+    "date_parse": {
+      "dayfirst": true
+    }
+  },
+  "column_overrides": {
+
+    "date": "date_death",
+    "Release": "date_death_report"
+  },
+  "auxiliary_columns": {}
+}

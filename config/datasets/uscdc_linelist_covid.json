@@ -1,0 +1,35 @@
+{
+  "name": "uscdc_linelist_covid",
+  "disease": "COVID-19",
+  "citation_short": "uscdc linelist",
+  "source": {
+    "type": "path",
+    "value": "./data/delay_distributions/uscdc_linelist_reporting_delay_from_symptom_onset.csv"
+  },
+  "format": "csv",
+  "linelist": true,
+  "meta": {
+    "location": "United States",
+    "data_availability": "US CDC"
+  },
+  "delay_definitions": [
+    {
+      "name": "symptom_onset_to_report",
+      "start_col": "date_symptom_onset",
+      "end_col": "date_case_report"
+    }
+  ],
+  "read_options": {
+    "encoding": "utf-8"
+  },
+  "preprocess": {
+    "date_parse": {
+      "dayfirst": true
+    }
+  },
+  "column_overrides": {
+    "reference_date": "date_symptom_onset",
+    "report_date": "date_case_report"
+  },
+  "auxiliary_columns": {}
+}

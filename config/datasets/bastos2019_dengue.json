@@ -1,0 +1,36 @@
+{
+  "name": "bastos2019_dengue",
+  "disease": "Dengue",
+  "citation_short": "bastos dengue",
+  "source": {
+    "type": "path",
+    "value": "./data/delay_distributions/denguesinan.RData"
+  },
+  "format": "rda",
+  "linelist": true,
+  "meta": {
+    "location": "Rio de Janeiro, Brazil",
+    "data_availability": "A modelling approach for correcting reporting delays in disease surveillance data"
+  },
+  "delay_definitions": [
+    {
+      "name": "symptom_onset_to_report",
+      "start_col": "date_symptom_onset",
+      "end_col": "date_case_report"
+    }
+  ],
+  "read_options": {
+    "encoding": "utf-8"
+  },
+  "preprocess": {
+    "date_parse": {
+      "dayfirst": true
+    }
+  },
+  "column_overrides": {
+
+    "DT_SIN_PRI": "date_symptom_onset",
+    "DT_NOTIFIC": "date_case_report"
+  },
+  "auxiliary_columns": {}
+}

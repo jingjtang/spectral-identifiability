@@ -1,0 +1,37 @@
+{
+  "name": "altmejd2023_sweden_covid",
+  "disease": "COVID-19",
+  "citation_short": "pending",
+  "source": {
+    "type": "path",
+    "value": "./data/delay_distributions/FHM_combined.csv"
+  },
+  "format": "csv",
+  "linelist": false,
+  "meta": {
+    "location": "Sweden",
+    "data_availability": "Nowcasting COVID-19 Statistics Reported with Delay: A Case-Study of Sweden and the UK"
+  },
+  "delay_definitions": [
+    {
+      "name": "death_onset_to_report",
+      "start_col": "date_death",
+      "end_col": "date_death_report"
+    }
+  ],
+  "read_options": {
+    "encoding": "utf-8"
+  },
+  "preprocess": {
+    "date_parse": {
+      "dayfirst": true
+    }
+  },
+  "column_overrides": {
+
+    "event_date": "date_death",
+    "report_date": "date_death_report",
+    "total_cases": "n_samples"
+  },
+  "auxiliary_columns": {}
+}

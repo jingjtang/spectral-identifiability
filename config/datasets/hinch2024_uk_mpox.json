@@ -1,0 +1,36 @@
+{
+  "name": "hinch2024_uk_mpox",
+  "disease": "mpox",
+  "citation_short": "hinch2024_uk_mpox",
+  "source": {
+    "type": "url",
+    "value": "https://raw.githubusercontent.com/BDI-pathogens/EpiLine/refs/heads/main/examples/linear_r_linelist.csv"
+  },
+  "format": "csv",
+  "linelist": true,
+  "meta": {
+    "location": "United Kingdom",
+    "data_availability": "Quantification of the time-varying epidemic growth rate and of the delays between symptom onset and presenting to healthcare for the mpox epidemic in the UK in 2022"
+  },
+  "delay_definitions": [
+    {
+      "name": "symptom_onset_to_report",
+      "start_col": "date_symptom_onset",
+      "end_col": "date_case_report"
+    }
+  ],
+  "read_options": {
+    "encoding": "utf-8"
+  },
+  "preprocess": {
+    "date_parse": {
+      "dayfirst": true
+    }
+  },
+  "column_overrides": {
+
+    "symptom": "date_symptom_onset",
+    "report": "date_case_report"
+  },
+  "auxiliary_columns": {}
+}

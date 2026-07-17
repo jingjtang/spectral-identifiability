@@ -1,0 +1,48 @@
+{
+  "name": "verity2020_cn_covid",
+  "disease": "COVID-19",
+  "citation_short": "Verity 2020",
+  "source": {
+    "type": "url",
+    "value": "https://raw.githubusercontent.com/mrc-ide/COVID19_CFR_submission/refs/heads/master/data/deaths_integrated_with_linelist_17feb.csv"
+  },
+  "format": "csv",
+  "linelist": true,
+  "meta": {
+    "location": "China",
+    "data_availability": "Estimates of the severity of coronavirus disease 2019: a model-based analysis"
+  },
+  "delay_definitions": [
+    {
+      "name": "symptom_onset_to_hosp",
+      "start_col": "date_symptom_onset",
+      "end_col": "date_hosp_admission"
+    },
+    {
+      "name": "symptom_onset_to_death",
+      "start_col": "date_symptom_onset",
+      "end_col": "date_death"
+    }
+  ],
+  "read_options": {
+    "encoding": "utf-8"
+  },
+  "preprocess": {
+    "date_parse": {
+      "dayfirst": true
+    }
+  },
+  "column_overrides": {
+    "death_id": "case_id",
+    "age": "age",
+    "sex": "sex",
+
+    "date_onset": "date_symptom_onset",
+    "date_hospitalised": "date_hosp_admission",
+    "date_icu": "date_icu_admission",
+    "date_death": "date_death",
+    "date_confirmed": "date_case_report",
+    "date_tested": "date_test_result"
+  },
+  "auxiliary_columns": {}
+}

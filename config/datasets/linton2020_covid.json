@@ -1,0 +1,69 @@
+{
+  "name": "linton020_cn_covid",
+  "disease": "COVID-19",
+  "citation_short": "Linton 2020",
+  "source": {
+    "type": "path",
+    "value": "./data/delay_distributions/linton_supp_tableS1_S2_8Feb2020.xlsx"
+  },
+  "format": "xlsx",
+  "linelist": true,
+  "meta": {
+    "location": "China",
+    "data_availability": "Incubation Period and Other Epidemiological Characteristics of 2019 Novel Coronavirus Infections with Right Truncation: A Statistical Analysis of Publicly Available Case Data"
+  },
+  "delay_definitions": [
+    {
+      "name": "symptom_onset_to_report",
+      "start_col": "date_symptom_onset",
+      "end_col": "date_case_report"
+    },
+    {
+      "name": "symptom_onset_to_hosp",
+      "start_col": "date_symptom_onset",
+      "end_col": "date_hosp_admission"
+    },
+    {
+      "name": "symptom_onset_to_death",
+      "start_col": "date_symptom_onset",
+      "end_col": "date_death"
+    }
+  ],
+  "preprocess": {
+    "standardize_then_merge_sheets": {
+      "key": "ID",
+      "how": "outer",
+      "prefer_sheet_order": [0, 1],
+      "sheets": [
+        {
+          "sheet_name": 0,
+          "read_options": { "header": 1 },
+          "column_overrides": {
+            "ID": "case_id",
+            "ExposureL": "date_exposure_start",
+            "ExposureR": "date_exposure_end",
+            "Onset": "date_symptom_onset",
+            "DateCaseFirstSoughtHealthcare": "date_first_visit",
+            "DateHospitalizedIsolated": "date_hosp_admission",
+            "DateReportedConfirmed": "date_report"
+          },
+          "auxiliary_columns": {
+            "ExposureType": { "mapped_name": "exposure_type" }
+          }
+        },
+        {
+          "sheet_name": 1,
+          "read_options": { "header": 1 },
+          "column_overrides": {
+            "ID": "case_id",
+            "Onset": "date_symptom_onset",
+            "FirstSoughtHealthcare": "date_first_visit",
+            "Hospitalization/Isolation": "date_hosp_admission",
+            "Death": "date_death"
+          },
+          "auxiliary_columns": {}
+        }
+      ]
+    }
+  }
+}

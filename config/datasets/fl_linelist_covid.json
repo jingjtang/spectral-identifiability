@@ -1,0 +1,52 @@
+{
+  "name": "fl_linelist_covid",
+  "disease": "covid-19",
+  "citation_short": "fl linelist",
+  "source": {
+    "type": "path",
+    "value": "./data/delay_distributions/Florida_COVID19_07082020_Case_Line_Data.csv"
+  },
+  "format": "csv",
+  "linelist": true,
+  "meta": {
+    "location": "Florida, United States",
+    "data_availability": "https://covid19-usflibrary.hub.arcgis.com/datasets/14578f316bae4638a5d677ab9d57d0ba/about"
+  },
+  "delay_definitions": [
+    {
+      "name": "symptom_onset_to_report",
+      "start_col": "date_symptom_onset",
+      "end_col": "date_case_report"
+    },
+    {
+      "name": "symptom_onset_to_hosp",
+      "start_col": "date_symptom_onset",
+      "end_col": "date_hosp_admission"
+    },
+    {
+      "name": "symptom_onset_to_death",
+      "start_col": "date_symptom_onset",
+      "end_col": "date_death"
+    }
+  ],
+  "read_options": {
+    "encoding": "utf-8"
+  },
+  "preprocess": {
+    "date_parse": {
+      "dayfirst": true
+    }
+  },
+  "column_overrides": {
+    "death_id": "case_id",
+    "age": "age",
+    "sex": "sex",
+
+    "date_onset": "date_symptom_onset",
+    "date_hospitalised": "date_hosp_admission",
+    "date_icu": "date_icu_admission",
+    "date_death": "date_death",
+    "Case_": "date_case_report"
+  },
+  "auxiliary_columns": {}
+}

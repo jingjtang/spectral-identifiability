@@ -1,0 +1,48 @@
+{
+  "name": "xu2020_covid",
+  "disease": "COVID-19",
+  "citation_short": "Xu 2020",
+  "source": {
+    "type": "path",
+    "value": "./data/delay_distributions/Xu2020.csv"
+  },
+  "format": "csv",
+  "linelist": true,
+  "meta": {
+    "location": "worldwide",
+    "data_availability": "Open access epidemiological data from the COVID-19 outbreak"
+  },
+  "delay_definitions": [
+    {
+      "name": "symptom_onset_to_report",
+      "start_col": "date_symptom_onset",
+      "end_col": "date_case_report"
+    },
+    {
+      "name": "symptom_onset_to_hosp",
+      "start_col": "date_symptom_onset",
+      "end_col": "date_hosp_admission"
+    },
+    {
+      "name": "symptom_onset_to_death",
+      "start_col": "date_symptom_onset",
+      "end_col": "date_death"
+    }
+  ],
+  "read_options": {
+    "encoding": "utf-8"
+  },
+  "preprocess": {
+    "date_parse": {
+      "dayfirst": true
+    }
+  },
+  "column_overrides": {
+
+    "date_onset_symptoms": "date_symptom_onset",
+    "date_admission_hospital": "date_hosp_admission",
+    "date_deathor_discharge": "date_death",
+    "date_confirmation": "date_case_report"
+  },
+  "auxiliary_columns": {}
+}

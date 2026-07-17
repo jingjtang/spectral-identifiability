@@ -1,0 +1,70 @@
+{
+  "name": "zhang2020_cn_covid",
+  "disease": "COVID-19",
+  "citation_short": "Lancet ID 2020 (Juan-ZJ line list)",
+  "source": {
+    "type": "url",
+    "value": "https://raw.githubusercontent.com/Juan-ZJ/COVID-19-line-list/master/database.xlsx"
+  },
+  "format": "xlsx",
+  "linelist": true,
+  "meta": {
+    "location": "China",
+    "data_availability": "Evolving epidemiology and transmission dynamics of coronavirus disease 2019 outside Hubei province, China: a descriptive and modelling study"
+  },
+  "delay_definitions": [
+    {
+      "name": "symptom_onset_to_report",
+      "start_col": "date_symptom_onset",
+      "end_col": "date_case_report"
+    },
+    {
+      "name": "symptom_onset_to_hosp",
+      "start_col": "date_symptom_onset",
+      "end_col": "date_hosp_admission"
+    }
+  ],
+  "read_options": {
+    "sheet_name": "individual records"
+  },
+  "preprocess": {
+    "date_parse": {
+      "dayfirst": false
+    }
+  },
+  "column_overrides": {
+    "ID": "case_id",
+
+    "onset_date": "date_symptom_onset",
+    "hosp1_date": "date_first_visit",
+    "hosp2_date": "date_hosp_admission",
+    "report_date": "date_case_report"
+  },
+  "auxiliary_columns": {
+    "exposure_any": {
+      "mapped_name": "exposure_any",
+      "usage": ["filter_exposed_subset", "qc"],
+      "description": "Whether any exposure information is reported (0/1)."
+    },
+    "exposure_animal": {
+      "mapped_name": "exposure_animal",
+      "usage": ["stratify_exposure"],
+      "description": "Animal exposure indicator (0/1/NA)."
+    },
+    "exposure_case": {
+      "mapped_name": "exposure_case",
+      "usage": ["stratify_exposure"],
+      "description": "Exposure to known case indicator (0/1/NA)."
+    },
+    "exposure_Wuhan/Hubei": {
+      "mapped_name": "exposure_wuhan_hubei",
+      "usage": ["stratify_exposure", "filter_wuhan_related"],
+      "description": "Categorical Wuhan/Hubei exposure code (see variable list sheet)."
+    },
+    "exposure_Wuhan_type": {
+      "mapped_name": "exposure_wuhan_type",
+      "usage": ["stratify_exposure"],
+      "description": "Categorical Wuhan exposure type code (see variable list sheet)."
+    }
+  }
+}

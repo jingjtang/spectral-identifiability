@@ -1,0 +1,35 @@
+{
+  "name": "epidist_ebola",
+  "disease": "Ebola",
+  "citation_short": "Epidist ebola",
+  "source": {
+    "type": "path",
+    "value": "./data/delay_distributions/sierra_leone_ebola_data.csv"
+  },
+  "format": "csv",
+  "linelist": true,
+  "meta": {
+    "location": "Sierra Leone",
+    "data_availability": "Transmission Dynamics of Ebola Virus Disease and Intervention Effectiveness in Sierra Leone"
+  },
+  "delay_definitions": [
+    {
+      "name": "symptom_onset_to_report",
+      "start_col": "date_symptom_onset",
+      "end_col": "date_case_report"
+    }
+  ],
+  "read_options": {
+    "encoding": "utf-8"
+  },
+  "preprocess": {
+    "date_parse": {
+      "dayfirst": true
+    }
+  },
+  "column_overrides": {
+    "date_of_symptom_onset": "date_symptom_onset",
+    "date_of_sample_tested": "date_case_report"
+  },
+  "auxiliary_columns": {}
+}
