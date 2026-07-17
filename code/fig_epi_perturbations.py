@@ -252,12 +252,12 @@ def renewal_event_incidence(U_base, Rt_base, w, multiplier):
 # Metrics
 # =========================================================
 
-def downstream_rmse(D1, D2):
-    return np.sqrt(np.mean((D1 - D2) ** 2))
+def downstream_rmse(D0, D1):
+    return np.sqrt(np.mean((D0 - D1) ** 2))
 
 
-def upstream_rmse(U1, U2):
-    return np.sqrt(np.mean((U1 - U2) ** 2))
+def upstream_rmse(U0, U1):
+    return np.sqrt(np.mean((U0 - U1) ** 2))
 
 
 def one_sided_weights(n):

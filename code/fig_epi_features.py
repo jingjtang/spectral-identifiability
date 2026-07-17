@@ -5,7 +5,7 @@
 
 Examples
 --------
-Generate the US-level figure and one figure for every state::
+Generate the US-level figure::
 
     python fig_epi_features.py
 
@@ -56,7 +56,7 @@ def parse_args():
         nargs="+",
         metavar="STATE",
         help=("Two-letter state abbreviations (for example: ca ny), or 'all'. "
-              "Default: all states."),
+              "Default: no states."),
     )
     parser.add_argument(
         "--no-us",
@@ -86,7 +86,7 @@ def requested_regions(states, include_us=True):
     if include_us:
         regions.append(("US", "nation", "us", "us"))
 
-    normalized = STATE_CODES if states is None else [state.lower() for state in states]
+    normalized = [] if states is None else [state.lower() for state in states]
     if "all" in normalized:
         if len(normalized) != 1:
             raise ValueError("Use --states all by itself.")
@@ -296,7 +296,7 @@ def run_pipeline(args):
             pdf = args.out_dir / f"{stem}.pdf"
             base.plot_feasible_region_v3_single_us(
                 payload=payload, out_png=png, out_pdf=pdf,
-                figure_label=label,
+                figure_label=None if slug == "us" else label,
             )
             print(f"Saved {label} figure to {png} and {pdf}")
         except Exception as exc:

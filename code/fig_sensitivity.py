@@ -6,9 +6,14 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 import matplotlib.ticker as mticker
 from pathlib import Path
+from scipy.stats import lognorm
 
 from get_incubation_periods import build_lessler2009_support
-from utils import load_empirical_delay_subset
+from singlefreq_settings import (
+    SINGLEFREQ_EMPIRICAL_MAX_DELAY_DAYS,
+    SINGLEFREQ_PMF_TAU_MAX,
+)
+from utils import load_empirical_delay_subset, pdf_dist_to_daily_pmf
 
 plt.ioff()
 # ============================================================
@@ -16,9 +21,6 @@ plt.ioff()
 # ============================================================
 ALPHA = 0.2
 P_CONV = 1.0
-
-T_SIGNAL = 240
-AMP_SIGNAL = 1.0
 
 MEDIAN_MIN = 0.5
 MEDIAN_MAX = 21.0
@@ -28,8 +30,7 @@ DISP_MAX = np.exp(1.75)
 N_MEDIAN = 220
 N_DISP = 220
 
-MAX_DELAY = 160
-DT_FINE = 0.05
+MAX_DELAY = SINGLEFREQ_PMF_TAU_MAX
 
 MISSPEC_GRID = np.linspace(-0.30, 0.30, 61)
 
@@ -80,46 +81,9 @@ def normalize_pmf(x):
     return x / s
 
 
-def canonical_delta_u_periodic(T=240, period_days=7.0, amp=1.0, phase=0.0):
-    t = np.arange(T, dtype=float)
-    return amp * np.sin(2.0 * np.pi * t / period_days + phase)
-
-
-def pdf_to_discrete_pmf(pdf_func, max_delay=160, dt=0.05):
-    t_fine = np.arange(0, max_delay + dt, dt)
-    y = np.asarray(pdf_func(t_fine), float)
-    y = np.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
-    y = np.maximum(y, 0.0)
-
-    day_edges = np.arange(0, max_delay + 1, 1.0)
-    pmf = np.zeros(len(day_edges) - 1, dtype=float)
-
-    for i in range(len(pmf)):
-        m = (t_fine >= day_edges[i]) & (t_fine < day_edges[i + 1])
-        if np.any(m):
-            pmf[i] = np.trapezoid(y[m], t_fine[m])
-
-    return normalize_pmf(pmf)
-
-
-def lognormal_pdf_factory(mu_log, sigma_log):
-    def pdf(t):
-        t = np.asarray(t, float)
-        out = np.zeros_like(t, dtype=float)
-        m = t > 0
-        tt = t[m]
-        out[m] = (
-            1.0 / (tt * sigma_log * np.sqrt(2.0 * np.pi))
-        ) * np.exp(
-            -((np.log(tt) - mu_log) ** 2) / (2.0 * sigma_log ** 2)
-        )
-        return out
-    return pdf
-
-
-def lognormal_pmf_from_params(mu_log, sigma_log, max_delay=160, dt=0.05):
-    pdf = lognormal_pdf_factory(mu_log, sigma_log)
-    return pdf_to_discrete_pmf(pdf, max_delay=max_delay, dt=dt)
+def lognormal_pmf_from_params(mu_log, sigma_log, max_delay=MAX_DELAY):
+    dist = lognorm(s=sigma_log, scale=np.exp(mu_log))
+    return pdf_dist_to_daily_pmf(dist, tau_max=max_delay)
 
 
 def median_dispersion_to_lognormal_params(median_delay, dispersion):
@@ -140,56 +104,28 @@ def mean_sd_to_siglog(mean_delay, sd_delay):
     return float(np.sqrt(np.log(1.0 + (sd_delay / mean_delay) ** 2)))
 
 
-def compute_J_gaussian_freq(delta_u, g, sigma_noise, p=1.0, dt=1.0):
-    delta_u = np.asarray(delta_u, float)
+def dtft_power(g, freq):
     g = normalize_pmf(g)
+    k = np.arange(len(g), dtype=float)
+    G = np.exp(-2j * np.pi * float(freq) * k) @ g
+    return float(np.abs(G) ** 2)
 
-    n = len(delta_u)
-    sigma_noise = max(float(sigma_noise), 1e-12)
-
-    G = np.fft.rfft(g, n=n)
-    U = np.fft.rfft(delta_u, n=n)
-
-    freqs = np.fft.rfftfreq(n, d=dt)
-    df = (freqs[1] - freqs[0]) if len(freqs) > 1 else 1.0
-
-    integrand = (np.abs(p * G) ** 2) * (np.abs(U) ** 2) / (sigma_noise ** 2)
-
-    fft_weight = np.ones_like(integrand)
-    if len(fft_weight) > 2:
-        fft_weight[1:-1] = 2.0
-
-    return float(np.sum(fft_weight * integrand) * df)
-
-
-def critical_sigma_for_delay_pmf(g, delta_u, alpha=0.2, p=1.0, dt=1.0):
+def required_frequency_domain_contrast_ratio_for_delay_pmf(
+    g,
+    period_days,
+    alpha=0.2,
+    p=1.0,
+    eps=1e-15,
+):
+    freq = 1.0 / float(period_days)
+    power = dtft_power(g, freq)
     J_thresh = 4.0 * (1.0 - alpha) ** 2
-    K = compute_J_gaussian_freq(delta_u, g, sigma_noise=1.0, p=p, dt=dt)
-
-    if K <= 0 or not np.isfinite(K):
-        return np.nan
-
-    return float(np.sqrt(K / J_thresh))
+    return float(J_thresh / np.maximum((p ** 2) * power, eps))
 
 
-def critical_variance_ratio_for_delay_pmf(g, delta_u, alpha=0.2, p=1.0, dt=1.0):
-    sigma_crit = critical_sigma_for_delay_pmf(
-        g=g, delta_u=delta_u, alpha=alpha, p=p, dt=dt
-    )
-
-    if not np.isfinite(sigma_crit) or sigma_crit <= 0:
-        return np.nan
-
-    signal_var_up = np.var(delta_u)
-    if not np.isfinite(signal_var_up) or signal_var_up <= 0:
-        return np.nan
-
-    return float(signal_var_up / (sigma_crit ** 2))
-
-
-def required_variance_ratio(median_delay, dispersion, delta_u,
+def required_contrast_ratio(median_delay, dispersion, period_days,
                             alpha=0.2, p_conv=1.0,
-                            max_delay=160, dt_fine=0.05):
+                            max_delay=MAX_DELAY):
     mu_log, sigma_log = median_dispersion_to_lognormal_params(
         median_delay, dispersion
     )
@@ -197,33 +133,30 @@ def required_variance_ratio(median_delay, dispersion, delta_u,
         mu_log=mu_log,
         sigma_log=sigma_log,
         max_delay=max_delay,
-        dt=dt_fine,
     )
-    return critical_variance_ratio_for_delay_pmf(
+    return required_frequency_domain_contrast_ratio_for_delay_pmf(
         g=g,
-        delta_u=delta_u,
+        period_days=period_days,
         alpha=alpha,
         p=p_conv,
-        dt=1.0,
     )
 
 
-def build_critical_variance_ratio_map(median_grid, dispersion_grid, delta_u,
+def build_required_contrast_ratio_map(median_grid, dispersion_grid, period_days,
                                       alpha=0.2, p_conv=1.0,
-                                      max_delay=160, dt_fine=0.05):
+                                      max_delay=MAX_DELAY):
     out = np.full((len(dispersion_grid), len(median_grid)), np.nan, dtype=float)
 
     for iy, dispersion in enumerate(dispersion_grid):
         for ix, median_delay in enumerate(median_grid):
             try:
-                out[iy, ix] = required_variance_ratio(
+                out[iy, ix] = required_contrast_ratio(
                     median_delay=median_delay,
                     dispersion=dispersion,
-                    delta_u=delta_u,
+                    period_days=period_days,
                     alpha=alpha,
                     p_conv=p_conv,
                     max_delay=max_delay,
-                    dt_fine=dt_fine,
                 )
             except Exception:
                 out[iy, ix] = np.nan
@@ -264,7 +197,7 @@ def style_ax(ax):
     ax.grid(True, alpha=0.14)
 
 
-def misspec_curve(marker, delta_u, misspec_grid, perturb="median"):
+def misspec_curve(marker, period_days, misspec_grid, perturb="median"):
     m0 = float(marker["median_delay"])
     d0 = float(marker["dispersion"])
 
@@ -284,14 +217,13 @@ def misspec_curve(marker, delta_u, misspec_grid, perturb="median"):
             continue
 
         try:
-            out.append(required_variance_ratio(
+            out.append(required_contrast_ratio(
                 median_delay=m,
                 dispersion=d,
-                delta_u=delta_u,
+                period_days=period_days,
                 alpha=ALPHA,
                 p_conv=P_CONV,
                 max_delay=MAX_DELAY,
-                dt_fine=DT_FINE,
             ))
         except Exception:
             out.append(np.nan)
@@ -299,8 +231,8 @@ def misspec_curve(marker, delta_u, misspec_grid, perturb="median"):
     return np.asarray(out, float)
 
 
-def misspec_log_relative_curve(marker, delta_u, misspec_grid, perturb="median"):
-    y = misspec_curve(marker, delta_u, misspec_grid, perturb=perturb)
+def misspec_log_relative_curve(marker, period_days, misspec_grid, perturb="median"):
+    y = misspec_curve(marker, period_days, misspec_grid, perturb=perturb)
     idx0 = np.argmin(np.abs(misspec_grid))
     y0 = y[idx0]
 
@@ -319,31 +251,29 @@ def misspec_log_relative_curve(marker, delta_u, misspec_grid, perturb="median"):
 median_grid = np.linspace(MEDIAN_MIN, MEDIAN_MAX, N_MEDIAN)
 dispersion_grid = np.linspace(DISP_MIN, DISP_MAX, N_DISP)
 
-delta_u_3 = canonical_delta_u_periodic(T=T_SIGNAL, period_days=3.0, amp=AMP_SIGNAL)
-delta_u_7 = canonical_delta_u_periodic(T=T_SIGNAL, period_days=7.0, amp=AMP_SIGNAL)
-delta_u_14 = canonical_delta_u_periodic(T=T_SIGNAL, period_days=14.0, amp=AMP_SIGNAL)
+PERIOD_DAYS = [3.0, 7.0, 14.0]
 
-crit_var_ratio_3 = build_critical_variance_ratio_map(
-    median_grid, dispersion_grid, delta_u_3,
+crit_contrast_ratio_3 = build_required_contrast_ratio_map(
+    median_grid, dispersion_grid, PERIOD_DAYS[0],
     alpha=ALPHA, p_conv=P_CONV,
-    max_delay=MAX_DELAY, dt_fine=DT_FINE
+    max_delay=MAX_DELAY,
 )
 
-crit_var_ratio_7 = build_critical_variance_ratio_map(
-    median_grid, dispersion_grid, delta_u_7,
+crit_contrast_ratio_7 = build_required_contrast_ratio_map(
+    median_grid, dispersion_grid, PERIOD_DAYS[1],
     alpha=ALPHA, p_conv=P_CONV,
-    max_delay=MAX_DELAY, dt_fine=DT_FINE
+    max_delay=MAX_DELAY,
 )
 
-crit_var_ratio_14 = build_critical_variance_ratio_map(
-    median_grid, dispersion_grid, delta_u_14,
+crit_contrast_ratio_14 = build_required_contrast_ratio_map(
+    median_grid, dispersion_grid, PERIOD_DAYS[2],
     alpha=ALPHA, p_conv=P_CONV,
-    max_delay=MAX_DELAY, dt_fine=DT_FINE
+    max_delay=MAX_DELAY,
 )
 
-log_ratio_3 = log10_safe(crit_var_ratio_3)
-log_ratio_7 = log10_safe(crit_var_ratio_7)
-log_ratio_14 = log10_safe(crit_var_ratio_14)
+log_ratio_3 = log10_safe(crit_contrast_ratio_3)
+log_ratio_7 = log10_safe(crit_contrast_ratio_7)
+log_ratio_14 = log10_safe(crit_contrast_ratio_14)
 
 all_log_vals = np.concatenate([
     log_ratio_3[np.isfinite(log_ratio_3)],
@@ -379,7 +309,7 @@ inc_label_map = {
 
 emp_subset, emp_summary_df = load_empirical_delay_subset(
     dist_family=DIST_FAMILY,
-    max_delay_days=MAX_DELAY,
+    max_delay_days=SINGLEFREQ_EMPIRICAL_MAX_DELAY_DAYS,
 )
 
 MAX_EMP = 12
@@ -580,11 +510,11 @@ cbar.ax.tick_params(labelsize=7.0, pad=1)
 x_pct = MISSPEC_GRID * 100.0
 
 def plot_logrelative_misspec(
-    ax, delta_u, perturb, show_ylabel=False, show_xlabel=False
+    ax, period_days, perturb, show_ylabel=False, show_xlabel=False
 ):
     for d in emp_markers:
         y = misspec_log_relative_curve(
-            d, delta_u, MISSPEC_GRID, perturb=perturb
+            d, period_days, MISSPEC_GRID, perturb=perturb
         )
         c = marker_colors.get(d["label"], "#4d4d4d")
 
@@ -624,14 +554,14 @@ def plot_logrelative_misspec(
     style_ax(ax)
 
 # Row 2: median misspecification
-plot_logrelative_misspec(ax_m3,  delta_u_3,  "median", True,  True)
-plot_logrelative_misspec(ax_m7,  delta_u_7,  "median", False, True)
-plot_logrelative_misspec(ax_m14, delta_u_14, "median", False, True)
+plot_logrelative_misspec(ax_m3,  PERIOD_DAYS[0], "median", True,  True)
+plot_logrelative_misspec(ax_m7,  PERIOD_DAYS[1], "median", False, True)
+plot_logrelative_misspec(ax_m14, PERIOD_DAYS[2], "median", False, True)
 
 # Row 3: dispersion misspecification
-plot_logrelative_misspec(ax_d3,  delta_u_3,  "dispersion", True,  True)
-plot_logrelative_misspec(ax_d7,  delta_u_7,  "dispersion", False, True)
-plot_logrelative_misspec(ax_d14, delta_u_14, "dispersion", False, True)
+plot_logrelative_misspec(ax_d3,  PERIOD_DAYS[0], "dispersion", True,  True)
+plot_logrelative_misspec(ax_d7,  PERIOD_DAYS[1], "dispersion", False, True)
+plot_logrelative_misspec(ax_d14, PERIOD_DAYS[2], "dispersion", False, True)
 
 # Preserve panel dimensions/aspect while keeping modest separation by row.
 for ax in [ax_h3, ax_h7, ax_h14]:

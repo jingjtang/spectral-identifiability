@@ -13,7 +13,11 @@ from matplotlib.gridspec import GridSpec
 from matplotlib.offsetbox import AnchoredText
 
 from get_incubation_periods import build_lessler2009_support
-from utils import load_empirical_delay_subset
+from singlefreq_settings import (
+    SINGLEFREQ_EMPIRICAL_MAX_DELAY_DAYS,
+    SINGLEFREQ_PMF_TAU_MAX,
+)
+from utils import load_empirical_delay_subset, pdf_dist_to_daily_pmf
 
 
 # ============================================================
@@ -74,27 +78,6 @@ def normalize_pmf(x):
     if s <= 0:
         raise ValueError("PMF sum <= 0")
     return x / s
-
-
-def pdf_to_discrete_pmf(pdf_func, max_delay=120, dt=0.05):
-    """
-    Convert a continuous delay PDF into a daily discrete PMF on bins
-    [0,1), [1,2), ..., [max_delay-1, max_delay).
-    """
-    t_fine = np.arange(0, max_delay + dt, dt)
-    y = np.asarray(pdf_func(t_fine), float)
-    y = np.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
-    y = np.maximum(y, 0.0)
-
-    day_edges = np.arange(0, max_delay + 1, 1.0)
-    pmf = np.zeros(len(day_edges) - 1, dtype=float)
-
-    for i in range(len(pmf)):
-        m = (t_fine >= day_edges[i]) & (t_fine < day_edges[i + 1])
-        if np.any(m):
-            pmf[i] = np.trapezoid(y[m], t_fine[m])
-
-    return normalize_pmf(pmf)
 
 
 def dtft_power(g, freq_grid):
@@ -251,7 +234,7 @@ label_to_names = {
 # Column 2: empirical onset->report
 emp_subset, emp_summary_df = load_empirical_delay_subset(
     dist_family="lognormal",
-    max_delay_days=120,
+    max_delay_days=SINGLEFREQ_EMPIRICAL_MAX_DELAY_DAYS,
 )
 
 MAX_EMP = 12
@@ -321,7 +304,7 @@ right_color_map = {lab: col for lab, col in zip(right_labels, right_palette)}
 # ============================================================
 
 # Row 1 / Row 2
-T_MAX = 60
+T_MAX = SINGLEFREQ_PMF_TAU_MAX
 T_PDF_MAX = 30
 F_MAX = 0.5
 GRID_STEP = 0.05
@@ -338,8 +321,7 @@ P_CONV = 1.0
 PERIOD_MIN = 2.0
 PERIOD_MAX = 30.0
 N_PERIOD = 400
-MAX_DELAY_IDENT = 120
-DT_FINE_IDENT = 0.05
+MAX_DELAY_IDENT = SINGLEFREQ_PMF_TAU_MAX
 P_LIST = [1.0, 0.2]
 
 period_grid = np.linspace(PERIOD_MIN, PERIOD_MAX, N_PERIOD)
@@ -439,11 +421,7 @@ for name in inc_diseases:
     )
     ax_pow_inc.plot(f, p, linewidth=1.8, label=label, color=color)
 
-    g = pdf_to_discrete_pmf(
-        d.dist.pdf,
-        max_delay=MAX_DELAY_IDENT,
-        dt=DT_FINE_IDENT,
-    )
+    g = pdf_dist_to_daily_pmf(d.dist, tau_max=MAX_DELAY_IDENT)
     for p_val, ls in zip(P_LIST, ["-", "--"]):
         rmin, _, _ = required_snr_curve_single_frequency(
             g=g,
@@ -510,11 +488,7 @@ for key, s in emp_items:
     )
     ax_pow_emp.plot(f, p, linewidth=1.8, label=label, color=color)
 
-    g = pdf_to_discrete_pmf(
-        s.dist.pdf,
-        max_delay=MAX_DELAY_IDENT,
-        dt=DT_FINE_IDENT,
-    )
+    g = pdf_dist_to_daily_pmf(s.dist, tau_max=MAX_DELAY_IDENT)
     for p_val, ls in zip(P_LIST, ["-", "--"]):
         rmin, _, _ = required_snr_curve_single_frequency(
             g=g,
