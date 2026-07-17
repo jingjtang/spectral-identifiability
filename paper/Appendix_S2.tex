@@ -1,0 +1,212 @@
+\renewcommand{\thesection}{S\arabic{section}}
+\setcounter{section}{1}
+
+\subsection{Discrete one-sided evaluation of the separability functional}
+\label{sec:Appendix_S2}
+
+The separability functional in Eq.~\eqref{eq:J-def} is defined using a
+two-sided continuous Fourier representation. In numerical calculations,
+however, the upstream trajectories and delay kernels are real-valued,
+discretely sampled sequences. Their discrete Fourier transforms therefore
+satisfy conjugate symmetry, allowing the equivalent calculation to be
+performed using only the nonnegative-frequency coefficients.
+
+Let
+\[
+\Delta U_n
+=
+U_{1,n}-U_{0,n},
+\qquad
+n=0,\ldots,n_U-1,
+\]
+denote the discrete upstream contrast, and let
+\[
+g_n,
+\qquad
+n=0,\ldots,n_g-1,
+\]
+denote the discrete delay probability mass function. The corresponding
+difference between the expected downstream trajectories is the linear
+convolution
+\[
+\Delta D_n
+=
+p\,(\Delta U*g)_n.
+\]
+
+To represent this linear convolution using the discrete Fourier transform,
+both sequences are zero-padded to the full convolution length
+\begin{equation}
+L=n_U+n_g-1.
+\label{eq:full-convolution-length}
+\end{equation}
+This padding prevents the circular wraparound that would otherwise arise
+from multiplication in the discrete Fourier domain.
+
+For a sampling interval \(\Delta t\), define the length-\(L\) discrete
+Fourier transforms
+\begin{align}
+\Delta\widetilde U_m
+&=
+\sum_{n=0}^{L-1}
+\Delta U_n
+\exp\left(
+-\frac{2\pi i mn}{L}
+\right),
+\\
+\widetilde G_m
+&=
+\sum_{n=0}^{L-1}
+g_n
+\exp\left(
+-\frac{2\pi i mn}{L}
+\right),
+\end{align}
+evaluated at frequencies
+\begin{equation}
+f_m
+=
+\frac{m}{L\Delta t}.
+\label{eq:discrete-frequencies}
+\end{equation}
+
+Under this convention, the Fourier transform of the downstream contrast is
+\begin{equation}
+\Delta\widetilde D_m
+=
+p\,\widetilde G_m\,
+\Delta\widetilde U_m.
+\label{eq:discrete-downstream-contrast}
+\end{equation}
+
+Because \(\Delta U_n\) and \(g_n\) are real-valued,
+\begin{equation}
+\Delta\widetilde U_{L-m}
+=
+\Delta\widetilde U_m^{\,*},
+\qquad
+\widetilde G_{L-m}
+=
+\widetilde G_m^{\,*},
+\end{equation}
+where \(^*\) denotes complex conjugation. Consequently, the spectral
+integrand is symmetric between positive and negative frequencies. The
+two-sided spectral sum can therefore be evaluated from the one-sided real
+Fourier transform over
+\[
+m=0,\ldots,\left\lfloor\frac{L}{2}\right\rfloor.
+\]
+
+The discrete one-sided approximation to the model-specific separability
+functional is
+\begin{equation}
+J_{\mathcal M}^{(L)}(U_0,U_1)
+=
+\frac{\Delta t}{L}
+\sum_{m=0}^{\lfloor L/2\rfloor}
+q_m
+\frac{
+\left|p\,\widetilde G_m\right|^2
+}{
+N_{\mathcal M}(f_m)
+}
+\left|
+\Delta\widetilde U_m
+\right|^2,
+\label{eq:discrete-one-sided-J}
+\end{equation}
+where the one-sided multiplicity weights are
+\begin{equation}
+q_m
+=
+\begin{cases}
+1,
+&
+m=0,
+\\[4pt]
+1,
+&
+L\ \text{is even and}\ m=L/2,
+\\[4pt]
+2,
+&
+\text{otherwise}.
+\end{cases}
+\label{eq:one-sided-weights}
+\end{equation}
+
+The zero-frequency coefficient receives unit weight because it has no
+distinct negative-frequency counterpart. When \(L\) is even, the Nyquist
+coefficient \(m=L/2\) is also self-conjugate and therefore receives unit
+weight. Every other positive-frequency coefficient represents a conjugate
+pair and consequently receives weight two.
+
+The normalization in Eq.~\eqref{eq:discrete-one-sided-J} follows from
+Parseval's identity under the discrete Fourier-transform convention above:
+\begin{equation}
+\Delta t
+\sum_{n=0}^{L-1}
+|x_n|^2
+=
+\frac{\Delta t}{L}
+\sum_{m=0}^{L-1}
+|\widetilde X_m|^2.
+\label{eq:discrete-parseval}
+\end{equation}
+Thus, the one-sided weighted sum in
+Eq.~\eqref{eq:discrete-one-sided-J} recovers exactly the same spectral
+energy as the corresponding two-sided discrete sum.
+
+For daily observations, \(\Delta t=1\) day, and
+Eq.~\eqref{eq:discrete-one-sided-J} simplifies to
+\begin{equation}
+J_{\mathcal M}^{(L)}(U_0,U_1)
+=
+\frac{1}{L}
+\sum_{m=0}^{\lfloor L/2\rfloor}
+q_m
+\frac{
+\left|p\,\widetilde G_m\right|^2
+}{
+N_{\mathcal M}(f_m)
+}
+\left|
+\Delta\widetilde U_m
+\right|^2.
+\label{eq:discrete-one-sided-J-daily}
+\end{equation}
+
+For additive Gaussian noise with a constant standard deviation
+\(\sigma_\varepsilon\), the effective noise scale is
+\[
+N_{\mathcal M}(f_m)=\sigma_\varepsilon^2,
+\]
+giving
+\begin{equation}
+J_{\mathrm{G}}^{(L)}(U_0,U_1)
+=
+\frac{1}{L}
+\sum_{m=0}^{\lfloor L/2\rfloor}
+q_m
+\frac{
+\left|p\,\widetilde G_m\right|^2
+\left|\Delta\widetilde U_m\right|^2
+}{
+\sigma_\varepsilon^2
+}.
+\label{eq:discrete-gaussian-J}
+\end{equation}
+
+More generally, a frequency-dependent effective noise scale
+\(N_{\mathcal M}(f_m)\) can be inserted directly into
+Eq.~\eqref{eq:discrete-one-sided-J}. For the count observation models
+considered in this study, the corresponding conservative likelihood-based
+variance normalization is constant across frequency, as specified in
+Table~\ref{tab:noise-models} and derived in
+Appendix~\ref{sec:Appendix_S1}.
+
+Equation~\eqref{eq:discrete-one-sided-J} is therefore the discrete numerical
+counterpart of the continuous two-sided functional in
+Eq.~\eqref{eq:J-def}. The use of a one-sided real Fourier transform changes
+only the computational representation and does not change the value or
+interpretation of the separability functional.

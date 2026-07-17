@@ -1,0 +1,105 @@
+\renewcommand{\thesection}{S\arabic{section}}
+\setcounter{section}{0}
+
+\section{Construction of the illustrative example in Figure 1}
+\label{sec:Appendix_S1}
+
+Figure~\ref{fig:intro} provides a data-informed illustration of how
+delay filtering suppresses rapid differences between candidate upstream
+epidemic trajectories. The figure is intended to illustrate the
+observation and separability framework rather than to provide a
+substantive reconstruction of the U.S. epidemic.
+
+\subsection{Observed downstream incidence}
+
+Daily U.S. confirmed-case incidence was obtained from the Johns Hopkins University Center for Systems Science and Engineering COVID-19 data stream \cite{dong2020interactive}, accessed through the Delphi Epidata API \cite{farrow2015delphi}. We used the national-level \texttt{jhu-csse/confirmed\_incidence\_num} signal from April 1, 2020, through June 30, 2021. The series was aligned to a complete daily sequence, with missing values linearly interpolated. Figure~\ref{fig:intro}
+
+displays the period from September 1, 2020, through March 31, 2021.
+
+\subsection{Smoothed downstream mean and observation noise}
+
+To separate broad epidemic variation from day-to-day observational
+fluctuation, we estimated a smooth downstream mean
+\(\widehat{\mu}(t)\) using second-order trend filtering. The effective
+degrees of freedom were selected over a prespecified grid. Conditional
+on each candidate smooth mean, Gaussian, Poisson, and negative-binomial
+observation models were fitted, and the combination of trend-filter
+complexity and observation model was selected by the Akaike information
+criterion. The resulting residual or model-based variance scale was used
+to define the effective observation-noise level shown in
+Fig.~\ref{fig:intro}F.
+
+\subsection{Delay distribution}
+
+The delay kernel was based on the published COVID-19
+symptom-onset-to-case-report distribution reported by
+Zhang et al.~\cite{zhang2020evolving}. A lognormal representation was
+converted to a discrete daily probability mass function by integrating
+the fitted distribution over consecutive one-day intervals. The kernel
+was truncated at 60 days and renormalized to sum to one.
+
+\subsection{Construction of the reference upstream trajectory}
+
+The reference upstream trajectory \(U_0(t)\) was obtained by solving a
+nonnegative regularized inverse problem. Let \(K_g\) denote the linear
+convolution operator induced by the delay kernel \(g\). We estimated
+\(U_1\) by minimizing
+\[
+\left\|K_g U-\widehat{\mu}\right\|_2^2
++
+\lambda\left\|\Delta^2 U\right\|_1
+\]
+subject to \(U(t)\geq 0\), where \(\Delta^2\) is the second-difference
+operator. The regularization term stabilizes the inverse problem and
+produces a smooth reference trajectory whose delayed projection follows
+the estimated downstream mean.
+
+\subsection{Construction of the alternative upstream trajectory}
+
+The alternative trajectory \(U_1(t)\) was constructed to differ visibly
+from \(U_0(t)\) at short temporal scales while producing a similar
+downstream projection. Candidate perturbations were formed from mixtures
+of sinusoidal components concentrated near frequencies corresponding to
+7- and 3-day periods. For each candidate perturbation \(h(t)\), we
+considered
+\[
+U_1(t)=\max\{U_0(t)+a h(t),0\},
+\]
+where the amplitude \(a\) was increased to the largest value satisfying
+both
+\[
+\operatorname{RMSE}(K_gU_1,K_gU_0)
+\leq
+\gamma\,\operatorname{RMSE}(K_gU_0,y)
+\]
+and
+\[
+\operatorname{RMSE}(K_gU_1,y)
+\leq
+\eta\,\operatorname{RMSE}(K_gU_0,y).
+\]
+For the displayed example, \(\gamma=1\) and \(\eta=1.05\). Among feasible
+candidates, we selected the perturbation producing the largest visible
+upstream separation while retaining substantial spectral energy near
+the two target frequencies.
+
+\subsection{Spectral quantities}
+
+The upstream spectral contrast shown in Fig.~\ref{fig:intro}D is
+\[
+\left|\widehat{U}_0(f)-\widehat{U}_1(f)\right|^2.
+\]
+The delay attenuation in Fig.~\ref{fig:intro}E is
+\[
+\left|\widehat{G}(f)\right|^2,
+\]
+and the filtered contrast in Fig.~\ref{fig:intro}F is
+\[
+p^2
+\left|\widehat{G}(f)\right|^2
+\left|\widehat{U}_0(f)-\widehat{U}_1(f)\right|^2.
+\]
+The horizontal reference line denotes the effective observation-noise
+level under the selected observation model. These quantities are shown
+to illustrate the frequency-wise components that motivate the
+separability functional introduced in the main text.
