@@ -36,6 +36,7 @@ from urllib.parse import urlparse
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 from matplotlib.dates import MonthLocator, DateFormatter
 from scipy.optimize import minimize_scalar
 from scipy.signal import fftconvolve
@@ -165,6 +166,17 @@ def set_epidata_api_key(config_dir: Path = CONFIG_DIR) -> bool:
         return False
     os.environ["DELPHI_EPIDATA_KEY"] = key_path.read_text().strip()
     return True
+
+
+def apply_confirmed_cases_axis(ax, observed_values, *, offset_text_size=8.0, nbins=5):
+    observed_values = np.asarray(observed_values, float)
+    observed_values = observed_values[np.isfinite(observed_values)]
+    if observed_values.size:
+        ymax = float(np.nanmax(observed_values))
+        ax.set_ylim(0.0, ymax * 1.08 if ymax > 0 else 1.0)
+    ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+    ax.yaxis.get_offset_text().set_size(offset_text_size)
+    ax.yaxis.set_major_locator(mticker.MaxNLocator(nbins))
 
 
 def load_local_signal_df(
@@ -717,13 +729,13 @@ def plot_feasible_region_v2(
             cutoff_to_refdown_plot[fc],
             lw=1.2,
             color=c_fc[fc],
-            label=rf"$KU^\star_{{{cutoff_label(fc)}}}$",
+            label=rf"$D^{{ref}}_{{f_c={cutoff_label(fc)}}}$",
         )
     axA.set_title("Comparable downstream fits")
-    axA.set_ylabel("Confirmed cases")
+    axA.set_ylabel("Incidence")
     axA.grid(True, axis="y")
-    axA.xaxis.set_major_locator(MonthLocator(interval=1))
-    axA.xaxis.set_major_formatter(DateFormatter("%b"))
+    axA.xaxis.set_major_locator(MonthLocator(interval=2))
+    axA.xaxis.set_major_formatter(DateFormatter("%Y%m"))
     axA.legend(frameon=False, loc="upper left", ncol=1)
 
     # B. Upstream feasible bands.
@@ -735,13 +747,13 @@ def plot_feasible_region_v2(
         hi = Ufc + Bfc
         ymax = max(ymax, float(np.nanmax(hi)))
         axB.fill_between(dates_plot, lo, hi, color=c_fc[fc], alpha=0.15)
-        axB.plot(dates_plot, Ufc, color=c_fc[fc], lw=1.25, label=rf"$f_c={cutoff_label(fc)}$")
+        axB.plot(dates_plot, Ufc, color=c_fc[fc], lw=1.25, label=rf"$U^{{ref}}_{{f_c={cutoff_label(fc)}}}$")
     axB.set_ylim(0, ymax * 1.05)
     axB.set_title("Feasible upstream bands")
-    axB.set_ylabel("Upstream incidence")
+    axB.set_ylabel("Incidence")
     axB.grid(True, axis="y")
-    axB.xaxis.set_major_locator(MonthLocator(interval=1))
-    axB.xaxis.set_major_formatter(DateFormatter("%b"))
+    axB.xaxis.set_major_locator(MonthLocator(interval=2))
+    axB.xaxis.set_major_formatter(DateFormatter("%Y%m"))
     axB.legend(frameon=False, loc="upper left")
 
     # C. Time-series growth rates.
@@ -751,14 +763,14 @@ def plot_feasible_region_v2(
             cutoff_to_growth_plot[fc],
             color=c_fc[fc],
             lw=1.25,
-            label=rf"$f_c={cutoff_label(fc)}$",
+            label=rf"$r^{{ref}}_{{f_c={cutoff_label(fc)}}}$",
         )
     axC.axhline(0.0, color="0.55", lw=0.8, ls="--")
     axC.set_title("Short-term growth rates")
     axC.set_ylabel("7-day log growth rate")
     axC.grid(True, axis="y")
-    axC.xaxis.set_major_locator(MonthLocator(interval=1))
-    axC.xaxis.set_major_formatter(DateFormatter("%b"))
+    axC.xaxis.set_major_locator(MonthLocator(interval=2))
+    axC.xaxis.set_major_formatter(DateFormatter("%Y%m"))
     axC.legend(frameon=False, loc="upper left")
 
     # D. Feasible-band width as the cutoff is relaxed.
@@ -880,15 +892,18 @@ def plot_feasible_region_v3_single_us(
             Ufc,
             color=c_fc[fc],
             lw=1.25,
-            label=rf"$f_c={cutoff_label(fc)}$",
+            label=rf"$U^{{ref}}_{{f_c={cutoff_label(fc)}}}$",
         )
 
     axA.set_ylim(0, ymax * 1.05 if ymax > 0 else 1.0)
     axA.set_title("Admissible upstream reconstructions")
-    axA.set_ylabel("Upstream incidence")
+    axA.set_ylabel("Incidence")
     axA.grid(True, axis="y")
-    axA.xaxis.set_major_locator(MonthLocator(interval=1))
-    axA.xaxis.set_major_formatter(DateFormatter("%b"))
+    axA.xaxis.set_major_locator(MonthLocator(interval=2))
+    axA.xaxis.set_major_formatter(DateFormatter("%Y%m"))
+    axA.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+    axA.yaxis.get_offset_text().set_size(7.8)
+    axA.yaxis.set_major_locator(mticker.MaxNLocator(5))
     axA.legend(frameon=False, loc="upper left")
 
     # B. Comparable downstream fits.
@@ -915,14 +930,15 @@ def plot_feasible_region_v3_single_us(
             cutoff_to_refdown_plot[fc],
             lw=1.15,
             color=c_fc[fc],
-            label=rf"$KU^\star_{{{cutoff_label(fc)}}}$",
+            label=rf"$D^{{ref}}_{{f_c={cutoff_label(fc)}}}$",
         )
 
     axB.set_title("Comparable downstream fits")
-    axB.set_ylabel("Confirmed cases")
+    axB.set_ylabel("Incidence")
     axB.grid(True, axis="y")
-    axB.xaxis.set_major_locator(MonthLocator(interval=1))
-    axB.xaxis.set_major_formatter(DateFormatter("%b"))
+    axB.xaxis.set_major_locator(MonthLocator(interval=2))
+    axB.xaxis.set_major_formatter(DateFormatter("%Y%m"))
+    apply_confirmed_cases_axis(axB, y_plot, offset_text_size=7.8, nbins=5)
     axB.legend(frameon=False, loc="upper left")
 
     # C. Seven-day growth rates.
@@ -932,7 +948,7 @@ def plot_feasible_region_v3_single_us(
             cutoff_to_growth_plot[fc],
             color=c_fc[fc],
             lw=1.25,
-            label=rf"$f_c={cutoff_label(fc)}$",
+            label=rf"$r^{{ref}}_{{f_c={cutoff_label(fc)}}}$",
         )
 
     axC.axhline(0.0, color="0.55", lw=0.8, ls="--")
@@ -940,8 +956,8 @@ def plot_feasible_region_v3_single_us(
     axC.set_ylabel("7-day log growth rate")
     axC.set_xlabel("Reference date")
     axC.grid(True, axis="y")
-    axC.xaxis.set_major_locator(MonthLocator(interval=1))
-    axC.xaxis.set_major_formatter(DateFormatter("%b"))
+    axC.xaxis.set_major_locator(MonthLocator(interval=2))
+    axC.xaxis.set_major_formatter(DateFormatter("%Y%m"))
     axC.legend(frameon=False, loc="lower left")
 
     # D. Peak timing and peak magnitude.

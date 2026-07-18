@@ -435,7 +435,7 @@ def J_identifiability_nb(
 
     n_full = len(delta_u) + len(g) - 1
 
-    dU = np.fft.rfft(delta_u, n=n_full)
+    delta_u_fft = np.fft.rfft(delta_u, n=n_full)
     G = np.fft.rfft(g, n=n_full)
     weights = one_sided_weights(n_full)
 
@@ -443,7 +443,7 @@ def J_identifiability_nb(
         dt / n_full
         * weights
         * np.abs(p * G) ** 2
-        * np.abs(dU) ** 2
+        * np.abs(delta_u_fft) ** 2
         / N_eff
     )
 
@@ -473,7 +473,7 @@ def spectral_quantities_nb(
 
     n_full = len(delta_u) + len(g) - 1
 
-    dU = np.fft.rfft(delta_u, n=n_full)
+    delta_u_fft = np.fft.rfft(delta_u, n=n_full)
     G = np.fft.rfft(g, n=n_full)
     freqs = np.fft.rfftfreq(n_full, d=dt)
 
@@ -482,14 +482,14 @@ def spectral_quantities_nb(
     raw_power = (
         dt / n_full
         * weights
-        * np.abs(dU) ** 2
+        * np.abs(delta_u_fft) ** 2
     )
 
     weighted = (
         dt / n_full
         * weights
         * np.abs(p * G) ** 2
-        * np.abs(dU) ** 2
+        * np.abs(delta_u_fft) ** 2
         / N_eff
     )
 
