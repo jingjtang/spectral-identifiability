@@ -128,6 +128,10 @@ def fetch_signal_df(
 def align_daily(df: pd.DataFrame, start: str, end: str) -> pd.DataFrame:
     idx = pd.date_range(start=start, end=end, freq="D")
     s = df.set_index("date")["y"].reindex(idx)
+    # Note: limit_direction="both" fills missing values at both ends. This is
+    # useful for small internal gaps, but if the local cache does not cover the
+    # requested window, it effectively extrapolates the edge values and can
+    # create boundary artifacts. Keep cached data wider than plotted windows.
     s = s.interpolate(limit_direction="both")
     y = np.maximum(s.values.astype(float), 0.0)
     return pd.DataFrame({"date": idx, "y": y})
@@ -471,11 +475,12 @@ def construct_U1_RMSE_gated_nearnull(
     freq_jitter: float = 0.01,
     basis_width: float = 28.0,
     eta_y: float = 1.05,         # NEW: KU1-to-y fit must remain close to KU0-to-y
+    eval_mask: Optional[np.ndarray] = None,
 ):
     """
     Construct U1 = max(U0 + alpha * h, 0), where h is a localized oscillatory basis.
 
-    Feasibility constraints:
+    Feasibility constraints on the evaluation window:
         RMSE(KU1, KU0) <= gamma * RMSE(KU0, y)
         RMSE(KU1, y)   <= eta_y * RMSE(KU0, y)
 
@@ -490,8 +495,16 @@ def construct_U1_RMSE_gated_nearnull(
 
     T = len(U0)
     mu0 = convolve_mean(U0, g)
+    if eval_mask is None:
+        eval_mask = np.ones(T, dtype=bool)
+    else:
+        eval_mask = np.asarray(eval_mask, dtype=bool)
+        if eval_mask.shape != (T,):
+            raise ValueError("eval_mask must have the same length as U0.")
+        if not np.any(eval_mask):
+            raise ValueError("eval_mask must contain at least one True value.")
 
-    baseline_rmse = float(np.sqrt(np.mean((mu0 - y) ** 2)))
+    baseline_rmse = float(np.sqrt(np.mean((mu0[eval_mask] - y[eval_mask]) ** 2)))
     target_rmse = float(gamma) * baseline_rmse
 
     # ------------------------------------------------------------------
@@ -623,8 +636,8 @@ def construct_U1_RMSE_gated_nearnull(
 
         mu1 = convolve_mean(U1, g)
 
-        rmse_KU1_KU0 = float(np.sqrt(np.mean((mu1 - mu0) ** 2)))
-        rmse_KU1_y = float(np.sqrt(np.mean((mu1 - y) ** 2)))
+        rmse_KU1_KU0 = float(np.sqrt(np.mean((mu1[eval_mask] - mu0[eval_mask]) ** 2)))
+        rmse_KU1_y = float(np.sqrt(np.mean((mu1[eval_mask] - y[eval_mask]) ** 2)))
 
         d = U1 - U0
 
@@ -669,12 +682,14 @@ def construct_U1_RMSE_gated_nearnull(
         best_alpha = 0.0
         best_out = out0
 
-        # If even alpha_hi is feasible, take it directly
+        # alpha_hi is a visualization cap: it prevents the RMSE gate from
+        # choosing extremely large, clipped perturbations whose spectra are
+        # dominated by clipping artifacts rather than the target frequencies.
         out_hi = build_from_alpha(h, hi_a)
         if feasible(out_hi):
             return hi_a, out_hi
 
-        # Otherwise push alpha to the feasibility boundary
+        # Push alpha to the feasibility boundary.
         for _ in range(n_bisect):
             mid = 0.5 * (lo_a + hi_a)
             out_mid = build_from_alpha(h, mid)
@@ -792,6 +807,23 @@ def estimate_gaussian_noise_psd(resid: np.ndarray, eps: float = 1e-12):
     return np.maximum(S, eps)
 
 
+def poisson_nb_effective_noise_scale(m0: np.ndarray, m1: np.ndarray, noise: NoiseFit):
+    m0 = np.asarray(m0, float)
+    m1 = np.asarray(m1, float)
+    m_min = float(min(np.min(m0), np.min(m1)))
+    m_min_safe = max(m_min, 1e-12)
+
+    # The Poisson and negative-binomial KL upper bounds use the minimum
+    # candidate downstream mean over the observed window. Using m_max would not
+    # justify the conservative testing-error bound in the Methods.
+    if noise.model == "poisson":
+        return m_min_safe, m_min
+    if noise.model == "nb":
+        kappa = max(float(noise.params.get("phi", 1.0)), 1e-12)
+        return m_min_safe + m_min_safe ** 2 / kappa, m_min
+    raise ValueError(f"Expected poisson or nb noise model, got {noise.model}")
+
+
 def cumulative_from_integrand(f, integrand):
     return np.cumsum(integrand)
 
@@ -805,6 +837,7 @@ def compute_J_and_integrand(
     mu_hat: np.ndarray,
     noise: NoiseFit,
     p: float = 1.0,
+    eval_mask: Optional[np.ndarray] = None,
 ):
     U0 = np.asarray(U0, float)
     U1 = np.asarray(U1, float)
@@ -812,62 +845,66 @@ def compute_J_and_integrand(
     y = np.asarray(y, float)
     mu_hat = np.asarray(mu_hat, float)
 
-    T = len(U0)
+    T_full = len(U0)
+    if eval_mask is None:
+        eval_mask = np.ones(T_full, dtype=bool)
+    else:
+        eval_mask = np.asarray(eval_mask, dtype=bool)
+        if eval_mask.shape != (T_full,):
+            raise ValueError("eval_mask must have the same length as U0.")
+        if not np.any(eval_mask):
+            raise ValueError("eval_mask must contain at least one True value.")
+
+    U0_eval = U0[eval_mask]
+    U1_eval = U1[eval_mask]
+    y_eval = y[eval_mask]
+    mu_hat_eval = mu_hat[eval_mask]
+    T = len(U0_eval)
+
     f, df = rfft_freqs(T, dt=1.0)
     A2, _ = attenuation_A2(g, T)
 
-    delta_u_fft = np.fft.rfft(U0 - U1)
+    delta_u_fft = np.fft.rfft(U0_eval - U1_eval)
     weights = one_sided_rfft_weights(T)
     one_sided_scale = weights / T
     delta_u_power = one_sided_scale * np.abs(delta_u_fft) ** 2
 
     if noise.model == "gaussian":
-        resid = y - mu_hat
+        resid = y_eval - mu_hat_eval
         S = one_sided_scale * estimate_gaussian_noise_psd(resid)
         integrand = (p**2) * A2 * delta_u_power / S
+        J_obs = None
     elif noise.model == "poisson":
-        m1 = p * convolve_mean(U0, g)
-        m2 = p * convolve_mean(U1, g)
-        mmax = float(
-            max(
-                np.max(m1),
-                np.max(m2),
-                1e-12,
-            )
-        )
+        # Convolve full trajectories first, then evaluate only the observation
+        # window to avoid boundary artifacts from convolving cropped series.
+        m1 = p * convolve_mean(U0, g)[eval_mask]
+        m2 = p * convolve_mean(U1, g)[eval_mask]
+        noise_scale, _ = poisson_nb_effective_noise_scale(m1, m2, noise)
+        J_obs = float(np.sum((m2 - m1) ** 2) / max(noise_scale, 1e-12))
 
         integrand = (
                 (p ** 2) * A2 * delta_u_power
-                / max(mmax, 1e-12)
+                / max(noise_scale, 1e-12)
         )
     elif noise.model == "nb":
-        m1 = p * convolve_mean(U0, g)
-        m2 = p * convolve_mean(U1, g)
-        mmax = float(
-            max(
-                np.max(m1),
-                np.max(m2),
-                1e-12,
-            )
-        )
-        kappa = float(noise.params.get("phi", 1.0))
-        variance_bound = (
-                mmax
-                + mmax ** 2 / max(kappa, 1e-12)
-        )
+        m1 = p * convolve_mean(U0, g)[eval_mask]
+        m2 = p * convolve_mean(U1, g)[eval_mask]
+        noise_scale, _ = poisson_nb_effective_noise_scale(m1, m2, noise)
+        J_obs = float(np.sum((m2 - m1) ** 2) / max(noise_scale, 1e-12))
 
         integrand = (
                 (p ** 2) * A2 * delta_u_power
-                / max(variance_bound, 1e-12)
+                / max(noise_scale, 1e-12)
         )
     else:
         raise ValueError(f"Unknown noise model: {noise.model}")
 
     cumJ = cumulative_from_integrand(f, integrand)
-    Jtot = float(cumJ[-1]) if len(cumJ) else float(np.sum(integrand) * df)
+    spectral_sum = float(cumJ[-1]) if len(cumJ) else float(np.sum(integrand) * df)
+    Jtot = spectral_sum if J_obs is None else J_obs
 
-    if Jtot > 0:
-        idx90 = int(np.searchsorted(cumJ, 0.9 * Jtot))
+    if spectral_sum > 0:
+        idx90 = int(np.searchsorted(cumJ, 0.9 * spectral_sum))
         f90 = float(f[min(idx90, len(f) - 1)])
     else:
         f90 = float("nan")
@@ -880,6 +917,7 @@ def compute_J_and_integrand(
         "integrand": integrand,
         "cumJ": cumJ,
         "J": Jtot,
+        "spectral_sum": spectral_sum,
         "f0.9": f90,
     }
 
@@ -987,6 +1025,9 @@ def plot_intro_figure(
 
     # ------------------------------------------------------------
     # Frequency-domain quantities.
+    # Note: the spectrum is computed after slicing to the displayed date
+    # window. It should be interpreted as a local display-window contrast
+    # spectrum, not as a full fitted-support spectrum.
     # One-sided rFFT bins combine positive and negative frequencies.
     # ------------------------------------------------------------
     Tw = len(U0_w)
@@ -1008,7 +1049,6 @@ def plot_intro_figure(
         (p ** 2) * delta_u_power_m * A2_m
     )
 
-    # ------------------------------------------------------------
     # Preserve the previous noise-level construction
     # ------------------------------------------------------------
     if noise.model == "gaussian":
@@ -1017,43 +1057,17 @@ def plot_intro_figure(
         noise_label = "One-sided noise level"
 
     elif noise.model == "poisson":
-        m1 = p * D0_w
-        m2 = p * D1_w
-
-        mmax = float(
-            np.max([
-                m1.max(),
-                m2.max(),
-                1e-12,
-            ])
-        )
-
-        noise_level = float(2.0 * mmax)
+        m1 = D0_w
+        m2 = D1_w
+        noise_scale, _ = poisson_nb_effective_noise_scale(m1, m2, noise)
+        noise_level = float(2.0 * noise_scale)
         noise_label = r"One-sided noise level"
 
     elif noise.model == "nb":
-        m1 = p * D0_w
-        m2 = p * D1_w
-
-        mmax = float(
-            np.max([
-                m1.max(),
-                m2.max(),
-                1e-12,
-            ])
-        )
-
-        phi = float(noise.params.get("phi", 1.0))
-
-        nb_variance_level = (
-
-                mmax
-
-                + mmax ** 2 / max(phi, 1e-12)
-
-        )
-
-        noise_level = float(2.0 * nb_variance_level)
+        m1 = D0_w
+        m2 = D1_w
+        noise_scale, _ = poisson_nb_effective_noise_scale(m1, m2, noise)
+        noise_level = float(2.0 * noise_scale)
         noise_label = "One-sided noise level"
 
     else:
@@ -1091,10 +1105,10 @@ def plot_intro_figure(
         3,
         figure=fig,
         width_ratios=[4.0, 2.0, 4.0],
-        left=0.045,
+        left=0.085,
         right=0.99,
         bottom=0.08,
-        top=0.95,
+        top=0.90,
         wspace=0.30,
         hspace=0.4,
     )
@@ -1106,6 +1120,40 @@ def plot_intro_figure(
     axD = fig.add_subplot(gs[1, 0])
     axE = fig.add_subplot(gs[1, 1])
     axF = fig.add_subplot(gs[1, 2])
+
+    # Column and row headers for the conceptual grid.
+    header_fontsize = 11
+    row_header_fontsize = 10
+    col_axes = [axA, axB, axC]
+    col_titles = ["Upstream", "Delay", "Downstream"]
+    for ax, label in zip(col_axes, col_titles):
+        bb = ax.get_position()
+        fig.text(
+            0.5 * (bb.x0 + bb.x1),
+            0.945,
+            label,
+            ha="center",
+            va="bottom",
+            fontsize=header_fontsize,
+            fontweight="bold",
+        )
+
+    for row_axes, label in [
+        ([axA, axB, axC], "Time Domain"),
+        ([axD, axE, axF], "Frequency Domain"),
+    ]:
+        y0 = min(ax.get_position().y0 for ax in row_axes)
+        y1 = max(ax.get_position().y1 for ax in row_axes)
+        fig.text(
+            0.018,
+            0.5 * (y0 + y1),
+            label,
+            ha="center",
+            va="center",
+            rotation=90,
+            fontsize=row_header_fontsize,
+            fontweight="bold",
+        )
 
     # ============================================================
     # A: upstream trajectories
@@ -1244,10 +1292,9 @@ def plot_intro_figure(
         fontsize=10
     )
 
-    apply_confirmed_cases_axis(axC, y_w, offset_text_size=8, nbins=5)
-
-    # Shared time-domain limits, following your previous standalone
-    # small-figure construction.
+    # Shared incidence axis for panels A and C. The upstream trajectories and
+    # downstream/observed trajectories use the same y-range and tick locations
+    # so their magnitudes can be compared directly.
     y_all_time = np.concatenate([
         U0_w,
         U1_w,
@@ -1261,20 +1308,16 @@ def plot_intro_figure(
     ]
 
     if y_all_time.size > 0:
-        ymin_t = float(
-            np.quantile(y_all_time, 0.02)
-        )
-        ymax_t = float(
-            np.quantile(y_all_time, 0.995)
-        )
+        ymax_t = float(np.nanmax(y_all_time))
+        upper = ymax_t * 1.08 if ymax_t > 0 else 1.0
+        shared_ticks = mticker.MaxNLocator(5).tick_values(0.0, upper)
+        shared_upper = float(np.nanmax(shared_ticks))
 
-        ylim_time_shared = (
-            ymin_t,
-            ymax_t * 1.1,
-        )
-
-        axA.set_ylim(*ylim_time_shared)
-        apply_confirmed_cases_axis(axC, y_w, offset_text_size=8, nbins=5)
+        for ax in (axA, axC):
+            ax.set_ylim(0.0, shared_upper)
+            ax.set_yticks(shared_ticks)
+            ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+            ax.yaxis.get_offset_text().set_size(8)
 
     # ============================================================
     # D: upstream spectral difference
@@ -1636,10 +1679,24 @@ def run_real_signals_pipeline(
         y = aligned["y"].values.astype(float)
 
         joint = select_best_df_and_noise(
-            y, df_grid=df_grid, ord=ord, criterion=criterion, rscript_bin=rscript_bin
+            y,
+            df_grid=df_grid,
+            ord=ord,
+            criterion=criterion,
+            rscript_bin=rscript_bin,
         )
+        dates_ts = pd.to_datetime(dates)
+        eval_mask = (
+            (dates_ts >= pd.Timestamp(SINGLEFREQ_INTRO_T_START))
+            & (dates_ts <= pd.Timestamp(SINGLEFREQ_INTRO_T_END))
+        ).to_numpy()
+        if not np.any(eval_mask):
+            raise ValueError(
+                f"No observations in evaluation window "
+                f"{SINGLEFREQ_INTRO_T_START} to {SINGLEFREQ_INTRO_T_END}."
+            )
         print(
-            f"Best df_target={joint.df_target}, df_used≈{joint.df_used:.2f}, "
+            f"Best full-support df_target={joint.df_target}, df_used≈{joint.df_used:.2f}, "
             f"lam≈{joint.lam_used:.3g}, noise={joint.best_noise.model}, AIC={joint.best_noise.aic:.2f}"
         )
 
@@ -1647,7 +1704,7 @@ def run_real_signals_pipeline(
             dates,
             y,
             joint,
-            title=f"{sig_key}: selected latent mean + noise model",
+            title=f"{sig_key}: selected full-support latent mean + noise model",
             fig_name=f"{sig_key}_latent_mean_trendfilter.png",
             show=True,
         )
@@ -1678,17 +1735,18 @@ def run_real_signals_pipeline(
             freq_jitter=freq_jitter,
             basis_width=basis_width,
             eta_y=1.05,
+            eval_mask=eval_mask,
         )
         print("U1 metrics:", metrics)
 
-        rmse_KU1_KU0 = float(np.sqrt(np.mean((mu1 - mu0) ** 2)))
-        rmse_KU0_y = float(np.sqrt(np.mean((mu0 - y) ** 2)))
-        rmse_KU1_y = float(np.sqrt(np.mean((mu1 - y) ** 2)))
+        rmse_KU1_KU0 = float(np.sqrt(np.mean((mu1[eval_mask] - mu0[eval_mask]) ** 2)))
+        rmse_KU0_y = float(np.sqrt(np.mean((mu0[eval_mask] - y[eval_mask]) ** 2)))
+        rmse_KU1_y = float(np.sqrt(np.mean((mu1[eval_mask] - y[eval_mask]) ** 2)))
 
-        print(f"RMSE(KU1, KU0) = {rmse_KU1_KU0:.4g}   "
+        print(f"Window RMSE(KU1, KU0) = {rmse_KU1_KU0:.4g}   "
               f"(target <= {metrics['target_rmse_KU1_KU0']:.4g})")
-        print(f"RMSE(KU0, y)   = {rmse_KU0_y:.4g}")
-        print(f"RMSE(KU1, y)   = {rmse_KU1_y:.4g}   "
+        print(f"Window RMSE(KU0, y)   = {rmse_KU0_y:.4g}")
+        print(f"Window RMSE(KU1, y)   = {rmse_KU1_y:.4g}   "
               f"(must be <= {metrics['eta_y']:.3f} * RMSE(KU0,y) = {metrics['eta_y'] * rmse_KU0_y:.4g})")
 
         intro_stats = plot_intro_figure(

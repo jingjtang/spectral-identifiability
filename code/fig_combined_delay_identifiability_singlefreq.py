@@ -38,38 +38,6 @@ def disease_from_dataset_name(ds: str) -> str:
 
 
 
-def continuous_pdf_to_power(pdf_func, max_delay, grid_step=0.05, freq_max=0.5):
-    """
-    Sample a continuous PDF on [0, max_delay], normalize area,
-    then compute |G(f)|^2 via rFFT.
-    """
-    t = np.arange(0, max_delay + grid_step, grid_step)
-    y = pdf_func(t)
-
-    y = np.asarray(y, dtype=float)
-    y = np.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
-    y = np.maximum(y, 0.0)
-
-    area = np.trapezoid(y, t)
-    if area <= 0:
-        freq = np.fft.rfftfreq(len(t), d=grid_step)
-        power = np.zeros_like(freq)
-        mask = freq <= freq_max
-        return freq[mask], power[mask]
-
-    y /= area
-
-    G = np.fft.rfft(y)
-    power = np.abs(G) ** 2
-    freq = np.fft.rfftfreq(len(t), d=grid_step)
-
-    if power[0] > 0:
-        power /= power[0] # numerical correction
-
-    power = np.maximum(power, 1e-12)
-    mask = freq <= freq_max
-    return freq[mask], power[mask]
-
 def normalize_pmf(x):
     x = np.asarray(x, float)
     x = np.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0)
@@ -93,6 +61,12 @@ def dtft_power(g, freq_grid):
     G = expo @ g
     power = np.abs(G) ** 2
     return power
+
+
+def daily_pmf_power_curve(g, freq_max=0.5, n_freq=500):
+    freq = np.linspace(0.0, freq_max, n_freq)
+    power = np.maximum(dtft_power(g, freq), 1e-12)
+    return freq, power
 
 
 def required_snr_curve_single_frequency(
@@ -307,7 +281,6 @@ right_color_map = {lab: col for lab, col in zip(right_labels, right_palette)}
 T_MAX = SINGLEFREQ_PMF_TAU_MAX
 T_PDF_MAX = 30
 F_MAX = 0.5
-GRID_STEP = 0.05
 
 # -----------------------------
 # Row 3: identifiability threshold settings
@@ -413,15 +386,10 @@ for name in inc_diseases:
     y = np.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
     ax_pdf_inc.plot(x, y, linewidth=1.8, label=label, color=color)
 
-    f, p = continuous_pdf_to_power(
-        d.dist.pdf,
-        T_MAX,
-        grid_step=GRID_STEP,
-        freq_max=F_MAX,
-    )
+    g = pdf_dist_to_daily_pmf(d.dist, tau_max=MAX_DELAY_IDENT)
+    f, p = daily_pmf_power_curve(g, freq_max=F_MAX)
     ax_pow_inc.plot(f, p, linewidth=1.8, label=label, color=color)
 
-    g = pdf_dist_to_daily_pmf(d.dist, tau_max=MAX_DELAY_IDENT)
     for p_val, ls in zip(P_LIST, ["-", "--"]):
         rmin, _, _ = required_snr_curve_single_frequency(
             g=g,
@@ -480,15 +448,10 @@ for key, s in emp_items:
     y = np.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
     ax_pdf_emp.plot(x, y, linewidth=1.8, label=label, color=color)
 
-    f, p = continuous_pdf_to_power(
-        s.dist.pdf,
-        T_MAX,
-        grid_step=GRID_STEP,
-        freq_max=F_MAX,
-    )
+    g = pdf_dist_to_daily_pmf(s.dist, tau_max=MAX_DELAY_IDENT)
+    f, p = daily_pmf_power_curve(g, freq_max=F_MAX)
     ax_pow_emp.plot(f, p, linewidth=1.8, label=label, color=color)
 
-    g = pdf_dist_to_daily_pmf(s.dist, tau_max=MAX_DELAY_IDENT)
     for p_val, ls in zip(P_LIST, ["-", "--"]):
         rmin, _, _ = required_snr_curve_single_frequency(
             g=g,

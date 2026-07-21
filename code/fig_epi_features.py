@@ -140,24 +140,27 @@ def build_region_payload(
     if not np.isfinite(y).all():
         raise ValueError(f"Case-incidence series for {label} contains missing values")
 
-    joint = base.select_best_df_and_noise(
-        y, df_grid=df_grid, ord=2, criterion="AIC", rscript_bin="Rscript"
-    )
-    mu_hat = joint.mu_hat
-    variance = base.get_variance_scale(mu_hat, joint.best_noise)
-    sigma2_eff = max(float(np.mean(variance)), 1e-8)
-    print(
-        f"{label}: df_target={joint.df_target}, df_used≈{joint.df_used:.2f}, "
-        f"noise={joint.best_noise.model}, sigma2_eff={sigma2_eff:.3g}"
-    )
-
     display_mask = (
         (pd.to_datetime(dates) >= pd.Timestamp(display_start))
         & (pd.to_datetime(dates) <= pd.Timestamp(display_end))
     )
     if not display_mask.any():
         raise ValueError("The display interval does not overlap the analysis interval")
+    joint = base.select_best_df_and_noise(
+        y,
+        df_grid=df_grid,
+        ord=2,
+        criterion="AIC",
+        rscript_bin="Rscript",
+    )
+    mu_hat = joint.mu_hat
+    sigma2_eff = base.get_effective_noise_scale(mu_hat[display_mask], joint.best_noise)
+    print(
+        f"{label}: full-support df_target={joint.df_target}, df_used≈{joint.df_used:.2f}, "
+        f"noise={joint.best_noise.model}, window_sigma2_eff={sigma2_eff:.3g}"
+    )
     display_scale = max(float(np.mean(mu_hat[display_mask])), 1e-8)
+    T_display = int(np.sum(display_mask))
 
     references, downstream, bands = {}, {}, {}
     band_rows = []
@@ -165,9 +168,11 @@ def build_region_payload(
         upstream, fitted, theta, _, _ = base.compute_cutoff_specific_reference_strict(
             y=y, mu_hat=mu_hat, g=g, f_cut=fc, ridge_theta=1e-6
         )
-        band = base.analytic_band_width_time_domain(
-            T=len(y), g=g, sigma2_eff=sigma2_eff, f_cut=fc, tau=tau
+        band_display = base.analytic_band_width_time_domain(
+            T=T_display, g=g, sigma2_eff=sigma2_eff, f_cut=fc, tau=tau
         )
+        band = np.full_like(y, np.nan, dtype=float)
+        band[display_mask] = band_display
         references[fc], downstream[fc], bands[fc] = upstream, fitted, band
         relative_width = 2.0 * band / display_scale
         band_rows.append({
@@ -183,14 +188,17 @@ def build_region_payload(
         })
         print(
             f"{label}: cutoff={base.cutoff_label(fc)}, "
-            f"basis_terms={len(theta)}, mean_band_width={np.mean(2 * band):.3g}"
+            f"basis_terms={len(theta)}, "
+            f"mean_window_band_width={np.mean(2 * band_display):.3g}"
         )
 
     curve_rows = []
     for fc in cutoff_curve:
-        band = base.analytic_band_width_time_domain(
-            T=len(y), g=g, sigma2_eff=sigma2_eff, f_cut=float(fc), tau=tau
+        band_display = base.analytic_band_width_time_domain(
+            T=T_display, g=g, sigma2_eff=sigma2_eff, f_cut=float(fc), tau=tau
         )
+        band = np.full_like(y, np.nan, dtype=float)
+        band[display_mask] = band_display
         relative_width = 2.0 * band / display_scale
         curve_rows.append({
             "region": label,

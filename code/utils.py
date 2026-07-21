@@ -278,6 +278,10 @@ def fetch_signal_df(
 def align_daily(df: pd.DataFrame, start: str, end: str) -> pd.DataFrame:
     idx = pd.date_range(start=start, end=end, freq="D")
     s = df.set_index("date")["y"].reindex(idx)
+    # Note: limit_direction="both" fills missing values at both ends. This is
+    # useful for small internal gaps, but if the local cache does not cover the
+    # requested window, it effectively extrapolates the edge values and can
+    # create boundary artifacts. Keep cached data wider than plotted windows.
     s = s.interpolate(limit_direction="both")
     y = np.maximum(s.values.astype(float), 0.0)
     return pd.DataFrame({"date": idx, "y": y})
@@ -479,6 +483,28 @@ def get_variance_scale(mu_hat: np.ndarray, noise_fit: NoiseFit) -> np.ndarray:
     if noise_fit.model == "nb":
         phi = float(noise_fit.params.get("phi", 1.0))
         return np.maximum(mu_hat + (mu_hat**2) / max(phi, 1e-8), 1.0)
+    raise ValueError(f"Unknown noise model {noise_fit.model}")
+
+
+def get_effective_noise_scale(mu_hat: np.ndarray, noise_fit: NoiseFit) -> float:
+    """Constant Methods normalization for separability bounds.
+
+    Gaussian uses the fitted variance. Poisson and negative-binomial use the
+    minimum downstream mean because the KL upper bounds require m_min and
+    V(m_min), respectively; using a mean or maximum variance would not match
+    the conservative testing-error bound.
+    """
+    mu_hat = np.asarray(mu_hat, float)
+    if noise_fit.model == "gaussian":
+        sigma = float(noise_fit.params.get("sigma", np.std(mu_hat)))
+        return max(sigma**2, 1e-8)
+
+    m_min = max(float(np.min(mu_hat)), 1e-8)
+    if noise_fit.model == "poisson":
+        return m_min
+    if noise_fit.model == "nb":
+        phi = max(float(noise_fit.params.get("phi", 1.0)), 1e-8)
+        return m_min + (m_min**2) / phi
     raise ValueError(f"Unknown noise model {noise_fit.model}")
 
 
@@ -1129,6 +1155,10 @@ def run_pipeline():
         dates = aligned["date"].values
         y = aligned["y"].values.astype(float)
 
+        display_mask = (
+            (pd.to_datetime(dates) >= pd.Timestamp(DISPLAY_START))
+            & (pd.to_datetime(dates) <= pd.Timestamp(DISPLAY_END))
+        )
         joint = select_best_df_and_noise(
             y,
             df_grid=DF_GRID,
@@ -1137,24 +1167,20 @@ def run_pipeline():
             rscript_bin=RSCRIPT_BIN,
         )
         mu_hat = joint.mu_hat
-        Vhat = get_variance_scale(mu_hat, joint.best_noise)
-        sigma2_eff = max(float(np.mean(Vhat)), 1e-8)
-        print(
-            f"{row_label}: best trendfilter df_target={joint.df_target}, "
-            f"df_used≈{joint.df_used:.2f}, noise={joint.best_noise.model}, "
-            f"sigma2_eff={sigma2_eff:.3g}"
-        )
 
         cutoff_to_ref = {}
         cutoff_to_refdown = {}
         cutoff_to_band = {}
 
         T = len(y)
-        display_mask = (
-            (pd.to_datetime(dates) >= pd.Timestamp(DISPLAY_START))
-            & (pd.to_datetime(dates) <= pd.Timestamp(DISPLAY_END))
+        sigma2_eff = get_effective_noise_scale(mu_hat[display_mask], joint.best_noise)
+        print(
+            f"{row_label}: best full-support trendfilter df_target={joint.df_target}, "
+            f"df_used≈{joint.df_used:.2f}, noise={joint.best_noise.model}, "
+            f"window_sigma2_eff={sigma2_eff:.3g}"
         )
         display_scale = max(float(np.mean(mu_hat[display_mask])), 1e-8)
+        T_display = int(np.sum(display_mask))
         band_width_rows = []
 
         for fc in CUTOFFS:
@@ -1165,14 +1191,16 @@ def run_pipeline():
                 f_cut=fc,
                 ridge_theta=GEOM_RIDGE_THETA,
             )
-            B_fc = analytic_band_width_time_domain(
-                T=T,
+            B_fc_display = analytic_band_width_time_domain(
+                T=T_display,
                 g=g,
                 sigma2_eff=sigma2_eff,
                 f_cut=fc,
                 tau=TAU,
                 dt=1.0,
             )
+            B_fc = np.full_like(y, np.nan, dtype=float)
+            B_fc[display_mask] = B_fc_display
 
             cutoff_to_ref[fc] = U_fc
             cutoff_to_refdown[fc] = KU_fc
@@ -1191,19 +1219,22 @@ def run_pipeline():
 
             print(
                 f"{row_label}: cutoff={cutoff_label(fc)} ({fc:.5f} cpd), "
-                f"basis_terms={len(theta_fc)}, mean_band_width={np.mean(2 * B_fc):.3g}"
+                f"basis_terms={len(theta_fc)}, "
+                f"mean_window_band_width={np.mean(2 * B_fc_display):.3g}"
             )
 
         band_width_curve_rows = []
         for fc in CUTOFF_CURVE:
-            B_fc = analytic_band_width_time_domain(
-                T=T,
+            B_fc_display = analytic_band_width_time_domain(
+                T=T_display,
                 g=g,
                 sigma2_eff=sigma2_eff,
                 f_cut=float(fc),
                 tau=TAU,
                 dt=1.0,
             )
+            B_fc = np.full_like(y, np.nan, dtype=float)
+            B_fc[display_mask] = B_fc_display
             rel_width_t = (2.0 * B_fc) / display_scale
             band_width_curve_rows.append({
                 "region": row_label,

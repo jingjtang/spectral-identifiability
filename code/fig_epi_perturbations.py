@@ -30,6 +30,8 @@ from scipy.stats import lognorm, gamma
 from scipy.ndimage import label
 from matplotlib.ticker import PercentFormatter
 
+from utils import pdf_dist_to_daily_pmf
+
 plt.rcParams.update({
     "font.family": "sans-serif",
     "font.size": 6.6,
@@ -62,13 +64,8 @@ def make_lognormal_delay(mean_days=7.0, sd_days=6.0, max_delay=40):
     sigma2 = np.log(1.0 + (sd_days**2) / (mean_days**2))
     sigma = np.sqrt(sigma2)
     mu = np.log(mean_days) - 0.5 * sigma2
-
-    edges = np.arange(-0.5, max_delay + 1.5, 1.0)
-    edges_pos = np.clip(edges, 1e-8, None)
-    cdf = lognorm.cdf(edges_pos, s=sigma, scale=np.exp(mu))
-    pmf = np.diff(cdf)
-    pmf = np.clip(pmf, 0, None)
-    return pmf / pmf.sum()
+    dist = lognorm(s=sigma, scale=np.exp(mu))
+    return pdf_dist_to_daily_pmf(dist, tau_max=max_delay)
 
 
 def make_generation_interval(mean_days=5.0, sd_days=2.0, max_lag=21):
@@ -344,14 +341,15 @@ def negative_binomial_effective_noise(
 
     define
 
-        m_max = max_t max(m_candidate(t), m_ref(t))
+        m_min = min_t min(m_candidate(t), m_ref(t))
 
     and
 
-        N_eff = m_max + m_max^2 / kappa.
+        V_min = m_min + m_min^2 / kappa.
 
-    This constant upper variance bound preserves the spectral
-    representation used in Methods.
+    This denominator gives the quadratic upper bound on the KL divergence.
+    Using m_max would not justify the conservative testing-error bound in
+    Methods.
     """
     D_candidate = np.asarray(D_candidate, dtype=float)
     D_ref = np.asarray(D_ref, dtype=float)
@@ -364,19 +362,16 @@ def negative_binomial_effective_noise(
     if kappa <= 0:
         raise ValueError("kappa must be positive.")
 
-    m_max = max(
-        float(np.max(D_candidate)),
-        float(np.max(D_ref)),
+    m_min = min(
+        float(np.min(D_candidate)),
+        float(np.min(D_ref)),
     )
 
-    if m_max <= 0:
-        raise ValueError(
-            "At least one downstream mean must be positive."
-        )
+    m_min_safe = max(m_min, 1e-12)
 
-    N_eff = m_max + m_max**2 / kappa
+    N_eff = m_min_safe + m_min_safe**2 / kappa
 
-    return N_eff, m_max
+    return N_eff, m_min
 
 
 def J_identifiability_nb(
@@ -394,15 +389,17 @@ def J_identifiability_nb(
 
     For each reference--candidate pair, the effective noise scale is
 
-        N_eff = m_max + m_max^2 / kappa,
+        N_eff = m_min + m_min^2 / kappa,
 
-    where m_max is the maximum downstream conditional mean across
+    where m_min is the minimum downstream conditional mean across
     the two hypotheses.
 
-    The resulting functional is
+    The resulting finite-observation functional is
 
-        J = integral
-            |p G(f)|^2 |Delta U(f)|^2 / N_eff df.
+        J = sum_t (m_candidate(t) - m_ref(t))^2 / N_eff,
+
+    where t ranges only over the observed upstream/downstream time points. The
+    convolution tail is not treated as observed data.
 
     Under the sufficient testing-error bound used in Methods,
     non-identifiability is guaranteed when
@@ -421,33 +418,24 @@ def J_identifiability_nb(
     if p <= 0:
         raise ValueError("p must be positive.")
 
+    T_obs = len(U_candidate)
     delta_u = U_candidate - U_ref
 
-    # Conditional downstream means under the two hypotheses.
-    D_candidate = p * causal_convolve(U_candidate, g)
-    D_ref = p * causal_convolve(U_ref, g)
+    # Full causal convolution is computed first to avoid boundary artifacts,
+    # then the statistical comparison is restricted to the observed window.
+    D_candidate_full = p * causal_convolve(U_candidate, g)
+    D_ref_full = p * causal_convolve(U_ref, g)
+    D_candidate = D_candidate_full[:T_obs]
+    D_ref = D_ref_full[:T_obs]
 
-    N_eff, m_max = negative_binomial_effective_noise(
+    N_eff, m_min = negative_binomial_effective_noise(
         D_candidate=D_candidate,
         D_ref=D_ref,
         kappa=kappa,
     )
 
-    n_full = len(delta_u) + len(g) - 1
-
-    delta_u_fft = np.fft.rfft(delta_u, n=n_full)
-    G = np.fft.rfft(g, n=n_full)
-    weights = one_sided_weights(n_full)
-
-    j_bins = (
-        dt / n_full
-        * weights
-        * np.abs(p * G) ** 2
-        * np.abs(delta_u_fft) ** 2
-        / N_eff
-    )
-
-    return float(np.sum(j_bins)), N_eff, m_max
+    J_obs = float(np.sum((D_candidate - D_ref) ** 2) / N_eff)
+    return J_obs, N_eff, m_min
 
 
 def spectral_quantities_nb(
@@ -458,12 +446,14 @@ def spectral_quantities_nb(
     dt=1.0,
 ):
     """
-    Frequency-bin decomposition of the negative-binomial separability
-    functional using the pair-specific effective noise bound
+    Descriptive frequency quantities using the observed downstream contrast and
+    the pair-specific effective noise bound
 
-        N_eff = m_max + m_max^2 / kappa.
+        N_eff = m_min + m_min^2 / kappa.
 
-    The returned `weighted` array sums exactly to J.
+    The returned `weighted` array is the one-sided Parseval decomposition of
+    the finite observed-window downstream contrast, so it sums exactly to the
+    time-domain J for that window.
     """
     delta_u = np.asarray(delta_u, dtype=float)
     g = np.asarray(g, dtype=float)
@@ -471,25 +461,25 @@ def spectral_quantities_nb(
     if N_eff <= 0:
         raise ValueError("N_eff must be positive.")
 
-    n_full = len(delta_u) + len(g) - 1
+    T_obs = len(delta_u)
+    delta_d_obs = p * causal_convolve(delta_u, g)[:T_obs]
 
-    delta_u_fft = np.fft.rfft(delta_u, n=n_full)
-    G = np.fft.rfft(g, n=n_full)
-    freqs = np.fft.rfftfreq(n_full, d=dt)
+    delta_u_fft = np.fft.rfft(delta_u, n=T_obs)
+    delta_d_fft = np.fft.rfft(delta_d_obs, n=T_obs)
+    freqs = np.fft.rfftfreq(T_obs, d=dt)
 
-    weights = one_sided_weights(n_full)
+    weights = one_sided_weights(T_obs)
 
     raw_power = (
-        dt / n_full
+        dt / T_obs
         * weights
         * np.abs(delta_u_fft) ** 2
     )
 
     weighted = (
-        dt / n_full
+        dt / T_obs
         * weights
-        * np.abs(p * G) ** 2
-        * np.abs(delta_u_fft) ** 2
+        * np.abs(delta_d_fft) ** 2
         / N_eff
     )
 
@@ -551,11 +541,15 @@ def choose_low_separability_high_contrast_example(
 
     J_example_max = example_J_multiplier * J_threshold
 
-    admissible = (
+    base_admissible = (
         np.isfinite(J_grid)
         & interior
         & (param_distance >= min_param_distance)
         & (J_grid > J_threshold)
+    )
+
+    admissible = (
+        base_admissible
         & (J_grid <= J_example_max)
     )
 
@@ -591,6 +585,31 @@ def choose_low_separability_high_contrast_example(
                 relative_u_rmse
                 + 0.01 * param_distance[iy, ix]
             )
+
+    if not np.any(np.isfinite(score)) and np.any(base_admissible):
+        # The m_min-based KL denominator can make the old fixed multiplier
+        # window too narrow. Fall back to the lowest-J alternatives outside the
+        # contour so the example remains close to the theoretical boundary.
+        low_j_cutoff = float(np.quantile(J_grid[base_admissible], 0.20))
+        admissible = base_admissible & (J_grid <= low_j_cutoff)
+        for iy in range(len(y_grid)):
+            for ix in range(len(x_grid)):
+                if not admissible[iy, ix]:
+                    continue
+
+                U = U_candidates[iy][ix]
+                D = D_candidates[iy][ix]
+
+                if U is None or D is None:
+                    continue
+
+                u_rmse = np.sqrt(np.mean((U - U_ref) ** 2))
+                relative_u_rmse = u_rmse / reference_scale
+                upstream_difference[iy, ix] = relative_u_rmse
+                score[iy, ix] = (
+                    relative_u_rmse
+                    + 0.01 * param_distance[iy, ix]
+                )
 
     if not np.any(np.isfinite(score)):
         raise RuntimeError(
@@ -659,6 +678,8 @@ p_conversion = 1.0
 
 alpha_target = 0.20
 J_threshold = 4 * (1 - alpha_target) ** 2
+ERROR_CONTOUR_LEVELS = [0.20, 0.10, 0.05, 0.01]
+ERROR_CONTOUR_COLORS = ["cyan", "deepskyblue", "white", "lime"]
 
 rng_obs = np.random.default_rng(20260709)
 
@@ -822,7 +843,7 @@ for spec in event_specs:
     ]
 
     N_eff_grid = np.zeros_like(Z)
-    m_max_grid = np.zeros_like(Z)
+    m_min_grid = np.zeros_like(Z)
     for ix, x_actual in enumerate(x_grid):
         for iy, effect_size in enumerate(y_grid):
 
@@ -835,7 +856,7 @@ for spec in event_specs:
                 effect_size,
             )
 
-            J, N_eff, m_max = J_identifiability_nb(
+            J, N_eff, m_min = J_identifiability_nb(
                 U_candidate=U_candidate,
                 U_ref=U_ref,
                 g=g,
@@ -847,7 +868,7 @@ for spec in event_specs:
             Z[iy, ix] = J
 
             N_eff_grid[iy, ix] = N_eff
-            m_max_grid[iy, ix] = m_max
+            m_min_grid[iy, ix] = m_min
 
             D_rmse_grid[iy, ix] = downstream_rmse(
                 D_candidate,
@@ -863,7 +884,7 @@ for spec in event_specs:
             D_candidates[iy][ix] = D_candidate
 
     spec["N_eff"] = N_eff_grid
-    spec["m_max"] = m_max_grid
+    spec["m_min"] = m_min_grid
 
     spec["J"] = Z
     spec["J_plot"] = np.log10(1.0 + Z)
@@ -903,7 +924,7 @@ for spec in event_specs:
 
     delta_u_pair = U_alt - U_ref
 
-    J_pair, N_eff_pair, m_max_pair = J_identifiability_nb(
+    J_pair, N_eff_pair, m_min_pair = J_identifiability_nb(
         U_candidate=U_alt,
         U_ref=U_ref,
         g=g,
@@ -921,7 +942,7 @@ for spec in event_specs:
     )
 
     spec["N_eff_pair"] = N_eff_pair
-    spec["m_max_pair"] = m_max_pair
+    spec["m_min_pair"] = m_min_pair
     spec["J_pair"] = J_pair
 
     spec["freqs"] = freqs
@@ -932,8 +953,8 @@ for spec in event_specs:
     # Consistency checks
     # ---------------------------------------------------------
 
-    # J computed directly from the Methods spectral functional.
-    J_methods, N_eff_pair, m_max_pair = J_identifiability_nb(
+    # J computed directly from the Methods finite-observation functional.
+    J_methods, N_eff_pair, m_min_pair = J_identifiability_nb(
         U_candidate=U_alt,
         U_ref=U_ref,
         g=g,
@@ -944,13 +965,13 @@ for spec in event_specs:
 
     J_spectral = np.sum(weighted)
 
-    delta_d_full = (
+    delta_d_obs = (
             p_conversion
             * np.convolve(delta_u_pair, g, mode="full")
-    )
+    )[:len(delta_u_pair)]
 
     J_downstream = np.sum(
-        delta_d_full ** 2 / N_eff_pair
+        delta_d_obs ** 2 / N_eff_pair
     )
 
     if not np.isclose(
@@ -979,7 +1000,7 @@ for spec in event_specs:
 
     print(
         f"{spec['title']}: "
-        f"m_max={m_max_pair:.3f}, "
+        f"m_min={m_min_pair:.3f}, "
         f"N_eff={N_eff_pair:.3f}, "
         f"J={J_methods:.4f}"
     )
@@ -1141,24 +1162,49 @@ for j, spec in enumerate(event_specs):
     #         alpha=0.65,
     #     )
 
-    # Theoretical sufficient non-identifiability threshold:
-    # J = 4(1 - alpha)^2.
-    J_threshold_plot = np.log10(1.0 + J_threshold)
-
-    if (
-            np.nanmin(spec["J_plot"])
-            <= J_threshold_plot
-            <= np.nanmax(spec["J_plot"])
-    ):
-        ax_hm.contour(
+    # Theoretical sufficient non-identifiability contours:
+    # J = 4(1 - alpha)^2, where alpha is the total testing-error rate.
+    # With the m_min-based NB bound these contours can be very close to the
+    # reference point, but drawing several alpha levels makes the scale explicit.
+    contour_alpha_levels = [
+        alpha for alpha in ERROR_CONTOUR_LEVELS
+        if 0.0 <= alpha <= 1.0
+    ]
+    contour_plot_levels = [
+        np.log10(1.0 + 4.0 * (1.0 - alpha) ** 2)
+        for alpha in contour_alpha_levels
+    ]
+    contour_pairs = sorted(
+        zip(contour_plot_levels, contour_alpha_levels),
+        key=lambda item: item[0],
+    )
+    valid_contour_pairs = [
+        (level, alpha)
+        for level, alpha in contour_pairs
+        if np.nanmin(spec["J_plot"]) <= level <= np.nanmax(spec["J_plot"])
+    ]
+    if valid_contour_pairs:
+        valid_levels = [level for level, _ in valid_contour_pairs]
+        level_to_label = {
+            level: rf"$\alpha={100 * alpha:.0f}\%$"
+            for level, alpha in valid_contour_pairs
+        }
+        contour_set = ax_hm.contour(
             X,
             Y,
             spec["J_plot"],
-            levels=[J_threshold_plot],
-            colors="cyan",
-            linewidths=0.95,
+            levels=valid_levels,
+            colors=ERROR_CONTOUR_COLORS[:len(valid_levels)],
+            linewidths=0.85,
             linestyles="-",
             zorder=4,
+        )
+        ax_hm.clabel(
+            contour_set,
+            fmt=level_to_label,
+            inline=True,
+            fontsize=5.6,
+            colors="cyan",
         )
 
     # Reference and selected alternative.
