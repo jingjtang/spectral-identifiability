@@ -1,499 +1,339 @@
 \renewcommand{\thesection}{S\arabic{section}}
 \setcounter{section}{3}
-
-\section{Frequency-constrained reconstruction and feature analysis}
+\section{Controlled synthetic event-generation framework}
 \label{sec:Appendix_S4}
 
-\subsection{Data and downstream target}
-\label{sec:appendix_downstream_target}
+This section describes the controlled synthetic framework used to construct the event-identifiability landscapes in Fig.~\ref{fig:event-impact}. The objective of these simulations was not to reproduce a specific historical epidemic, but to isolate how different event parameterizations propagate through epidemic dynamics, delay filtering, and observational noise under a common epidemic setting.
 
-We used daily confirmed COVID-19 case incidence from the Johns Hopkins
-University Center for Systems Science and Engineering data stream, accessed
-through the Delphi Epidata API. The reconstruction analysis was performed on
-the national US series from April 1, 2020, through June 30, 2021. For
-visualization and calculation of the epidemiological feature summaries, we
-restricted the displayed interval to September 1, 2020, through March 31,
-2021.
+\subsection{Baseline epidemic}
 
-Let
-\[
-y=(y_1,\ldots,y_T)^\top
-\]
-denote the observed daily case-incidence series. Because the raw observations
-contain day-of-week effects and other short-timescale reporting variation, we
-first estimated a smooth downstream mean
-\[
-\widehat{\mu}
+All event classes were evaluated using the same baseline epidemic trajectory. The baseline incidence curve was defined as a smooth bimodal epidemic,
+
+\begin{equation}
+U_0(t)
 =
-(\widehat{\mu}_1,\ldots,\widehat{\mu}_T)^\top
-\]
-using second-order trend filtering. Specifically, for each target effective
-degrees of freedom in
-\[
-\mathcal D
-=
-\{10,15,20,30,40,60,80,100,120\},
-\]
-we fitted a second-order trend-filtering model using the \texttt{genlasso}
-implementation in R.
-
-For each fitted mean, we evaluated Gaussian, Poisson, and
-negative-binomial observation models. The combination of trend-filtering
-degrees of freedom and observation model was selected by the Akaike
-information criterion. The fitted mean from the selected combination was used
-as the downstream reconstruction target \(\widehat{\mu}\).
-
-Let \(v_t\) denote the fitted conditional variance under the selected
-observation model. Thus,
-\[
-v_t=
-\begin{cases}
-\widehat{\sigma}^{\,2},
-&\text{Gaussian},\\[4pt]
-\widehat{\mu}_t,
-&\text{Poisson},\\[4pt]
-\widehat{\mu}_t+\widehat{\mu}_t^{\,2}/\widehat{\kappa},
-&\text{negative binomial},
-\end{cases}
-\]
-where \(\widehat{\kappa}\) is the fitted negative-binomial dispersion
-parameter. For the frequency-constrained illustration, we summarized this
-possibly time-varying variance by the effective variance
-\[
-\sigma_{\mathrm{eff}}^2
-=
-\frac{1}{T}\sum_{t=1}^{T}v_t.
-\]
-This scalar variance provides a common quadratic scale for constructing and
-visualizing the locally non-identifiable perturbation set. It is not intended
-to replace the observation-model-specific bounds derived in
-Appendix~\ref{sec:Appendix_S1}.
-
-
-\subsection{Delay kernel and discrete observation operator}
-\label{sec:appendix_delay_operator}
-
-The reconstruction used an empirical symptom-onset-to-case-report delay
-distribution for COVID-19 reported by Zhang et al. The fitted continuous
-lognormal distribution was discretized into daily probabilities,
-\[
-g_k
-=
-\Pr(k\leq \tau<k+1),
-\qquad k=0,\ldots,60,
-\]
-and renormalized so that
-\[
-\sum_{k=0}^{60}g_k=1.
-\]
-
-For an upstream incidence vector
-\[
-U=(U_1,\ldots,U_T)^\top,
-\]
-the corresponding downstream mean is
-\[
-KU,
-\]
-where \(K\in\mathbb R^{T\times T}\) is the lower-triangular causal convolution
-matrix with entries
-\[
-K_{ts}
-=
-\begin{cases}
-g_{t-s},&0\leq t-s\leq 60,\\
-0,&\text{otherwise}.
-\end{cases}
-\]
-Equivalently,
-\[
-(KU)_t
-=
-\sum_{k=0}^{\min(60,t-1)}g_kU_{t-k}.
-\]
-The finite-series calculation therefore uses causal linear convolution rather
-than circular convolution.
-
-\subsection{Frequency-constrained upstream reconstructions}
-\label{sec:appendix_cutoff_reconstruction}
-
-To isolate the effect of assumptions about admissible temporal scales, we
-represented the upstream trajectory in a real Fourier basis. Let
-\[
-\Phi_{f_c}
-=
-\begin{bmatrix}
-\phi_1 & \cdots & \phi_{q(f_c)}
-\end{bmatrix}
-\in\mathbb R^{T\times q(f_c)}
-\]
-contain the normalized constant, sine, and cosine basis vectors whose
-frequencies satisfy
-\[
-0\leq f\leq f_c.
-\]
-The basis vectors were normalized to have unit Euclidean norm. Apart from the
-constant component, each non-Nyquist Fourier frequency contributes one sine
-and one cosine basis vector.
-
-An upstream trajectory in the cutoff-specific class is written as
-\[
-U=\Phi_{f_c}\theta,
-\]
-where \(\theta\in\mathbb R^{q(f_c)}\) is the vector of Fourier coefficients.
-For each cutoff \(f_c\), the reference reconstruction was obtained by solving
-\[
-\widehat{\theta}_{f_c}
-=
-\arg\min_{\theta}
-\left\{
-\left\|
-K\Phi_{f_c}\theta-\widehat{\mu}
-\right\|_2^2
+35
 +
-\lambda_\theta
-\sum_{j=2}^{q(f_c)}\theta_j^2
-\right\},
-\]
-subject to
-\[
-\Phi_{f_c}\theta\geq 0.
-\]
-The first coefficient, corresponding to the constant component, was excluded
-from the ridge penalty. We used the small numerical ridge parameter
-\[
-\lambda_\theta=10^{-6},
-\]
-which stabilizes the optimization without materially determining the shape of
-the solution.
-
-The resulting cutoff-specific reconstruction and its delayed projection are
-\[
-U^\star_{f_c}
-=
-\Phi_{f_c}\widehat{\theta}_{f_c},
-\qquad
-D^\star_{f_c}
-=
-KU^\star_{f_c}.
-\]
-
-We considered
-\[
-f_c\in
-\left\{
-\frac{1}{35},
-\frac{1}{14},
-\frac{1}{7}
-\right\}
-\quad\text{cycles/day}.
-\]
-These cutoffs admit variation with periods no shorter than 35, 14, and 7 days,
-respectively. The three trajectories are therefore not estimates from three
-competing epidemiological models. They form a controlled sequence of
-reconstruction classes that progressively permits additional short-timescale
-structure.
-
-\subsection{Frequency-constrained non-identifiable perturbation bands}
-\label{sec:appendix_perturbation_bands}
-
-For each cutoff-specific reference trajectory, we considered perturbations
-within the same Fourier subspace,
-\[
-\delta U
-=
-\Phi_{f_c}a,
-\]
-where \(a\in\mathbb R^{q(f_c)}\) denotes the perturbation coefficients. Under
-the effective homoscedastic quadratic approximation used for this
-visualization, the downstream separability of a perturbation is
-\[
-J(\delta U)
-=
-\frac{\|K\delta U\|_2^2}
-{\sigma_{\mathrm{eff}}^2}.
-\]
-
-To obtain an analytically interpretable frequency-domain approximation to this
-quantity, let
-\[
-G_T(f)
-=
-\sum_{k=0}^{60}g_k
-\exp(-2\pi i f k)
-\]
-denote the discrete Fourier response of the delay kernel evaluated on the
-length-\(T\) Fourier grid. For a normalized sine or cosine basis component at
-frequency \(f_j\), define
-\[
-\lambda_j
-=
-\frac{|G_T(f_j)|^2}
-{\sigma_{\mathrm{eff}}^2}.
-\]
-The separability of a perturbation is then approximated by the diagonal
-spectral quadratic form
-\[
-J(\delta U)
-\approx
-a^\top\Lambda_{f_c}a,
-\qquad
-\Lambda_{f_c}
-=
-\operatorname{diag}(\lambda_1,\ldots,\lambda_{q(f_c)}).
-\]
-
-For a target total testing error \(\alpha=0.20\), the Gaussian
-non-identifiability threshold derived in
-Appendix~\ref{sec:Appendix_S1} is
-\[
-\tau_\alpha
-=
-4(1-\alpha)^2
-=
-2.56.
-\]
-We therefore define the cutoff-specific perturbation ellipsoid
-\[
-\mathcal A_{f_c}
-=
-\left\{
-a:
-a^\top\Lambda_{f_c}a
-\leq
-\tau_\alpha
-\right\}.
-\]
-
-At each time \(t\), the largest possible absolute perturbation within this
-ellipsoid is
-\[
-B_{f_c}(t)
-=
-\sup_{a\in\mathcal A_{f_c}}
-\left|
-\phi_{f_c}(t)^\top a
-\right|,
-\]
-where
-\[
-\phi_{f_c}(t)
-=
-\left(
-\phi_1(t),\ldots,\phi_{q(f_c)}(t)
-\right)^\top.
-\]
-By the Cauchy--Schwarz inequality in the
-\(\Lambda_{f_c}\)-weighted norm,
-\[
-B_{f_c}(t)
-=
-\sqrt{
-\tau_\alpha\,
-\phi_{f_c}(t)^\top
-\Lambda_{f_c}^{-1}
-\phi_{f_c}(t)
-}.
-\]
-Equivalently,
-\[
-B_{f_c}(t)
-=
-\left[
-\tau_\alpha
-\sum_{j=1}^{q(f_c)}
-\frac{\phi_j(t)^2}{\lambda_j}
-\right]^{1/2}.
-\]
-
-The band shown in Fig.~\ref{fig:epi-features}A is
-\[
-\left[
-\max\left\{
-U^\star_{f_c}(t)-B_{f_c}(t),0
-\right\},
-\;
-U^\star_{f_c}(t)+B_{f_c}(t)
-\right].
-\]
-The lower boundary was truncated at zero to respect the nonnegativity of
-incidence.
-
-The band is a pointwise envelope of the perturbation ellipsoid rather than a
-simultaneous confidence or credible band. In particular, the perturbation
-attaining the upper or lower endpoint may differ across time points. The band
-therefore visualizes the local geometry of the non-identifiable upstream set;
-it should not be interpreted as the sampling distribution of a specific
-reconstruction estimator.
-
-
-\subsection{Epidemiological feature summaries}
-\label{sec:Appendix_S5}
-
-We evaluated three quantities derived from each cutoff-specific upstream
-trajectory: epidemic peak timing, epidemic peak magnitude, and the seven-day
-log growth rate. All feature summaries were calculated over the displayed
-interval from September 1, 2020, through March 31, 2021.
-
-\subsubsection{Peak timing and peak magnitude}
-
-For each cutoff-specific reconstruction, we first formed a 14-day centered
-moving average,
-\[
-\widetilde U_{f_c}(t)
-=
-\frac{1}{14}
-\sum_{s\in\mathcal W_t}
-U^\star_{f_c}(s),
-\]
-where reflection padding was used at the boundaries of the finite interval.
-The peak index was defined as
-\[
-t^\star_{f_c}
-=
-\arg\max_t
-\widetilde U_{f_c}(t).
-\]
-
-For visualization, relative peak timing was calculated as
-\[
-T^{\mathrm{rel}}_{f_c}
-=
-\frac{t^\star_{f_c}}
-{T_{\mathrm{disp}}-1},
-\]
-where \(T_{\mathrm{disp}}\) is the number of days in the displayed analysis
-interval.
-
-The peak magnitude was evaluated from the unsmoothed cutoff-specific
-reconstruction at the peak index selected from the smoothed trajectory,
-\[
-M_{f_c}
-=
-U^\star_{f_c}(t^\star_{f_c}).
-\]
-Relative peak magnitude was then defined as
-\[
-M^{\mathrm{rel}}_{f_c}
-=
-\frac{M_{f_c}}
-{\max_{f_c'}M_{f_c'}}.
-\]
-The common 14-day smoothing used to locate the epidemic peak reduces the
-sensitivity of the peak summaries to isolated daily fluctuations while
-preserving the broad epidemic-wave structure.
-
-
-\subsubsection{Seven-day log growth rate}
-\label{sec:appendix_growth_rate}
-
-For each reconstructed upstream trajectory, we calculated the seven-day log
-growth rate
-\[
-r_{7,f_c}(t)
-=
-\frac{1}{7}
-\left[
-\log\left\{
-U^\star_{f_c}(t+7)+c
-\right\}
--
-\log\left\{
-U^\star_{f_c}(t)+c
-\right\}
+105
+\exp\!\left[
+-\frac{(t-42)^2}{2\times16^2}
+\right]
++
+85
+\exp\!\left[
+-\frac{(t-88)^2}{2\times23^2}
 \right],
-\]
-where \(c=1\) is a numerical offset used to avoid taking the logarithm of zero.
-The resulting growth-rate trajectory was smoothed using a five-day centered
-moving average with reflection padding at the boundaries. This final
-smoothing was applied identically to all cutoff-specific trajectories.
+\end{equation}
 
+evaluated over a simulation window consisting of 30 pre-event days and 120 post-event days. The event was centered at day 30.
 
-\subsection{Spectral sensitivity of the seven-day growth rate}
-\label{sec:appendix_growth_spectral}
+The corresponding baseline reproduction-number trajectory was inferred from the renewal equation,
 
-The seven-day growth rate is nonlinear in \(U(t)\), but its local spectral
-sensitivity can be seen through a first-order perturbation. Let
-\[
-U_\epsilon(t)
+\begin{equation}
+R_0(t)
 =
-U(t)+\epsilon\,\delta U(t).
-\]
-Differentiating \(r_7(t)\) with respect to \(\epsilon\) at \(\epsilon=0\)
-gives
-\[
-\left.
-\frac{\partial r_7[U_\epsilon](t)}
-{\partial\epsilon}
-\right|_{\epsilon=0}
+\frac{U_0(t)}
+{\sum_k w_kU_0(t-k)},
+\end{equation}
+
+where \(w_k\) denotes the discrete generation-interval distribution. This baseline \(R_t\) trajectory served only as the reference transmission process on which event perturbations were imposed.
+
+
+
+\subsection{Generation interval}
+
+Transmission dynamics followed the discrete renewal model described in the main text. The generation interval was represented by a Gamma distribution with mean 5 days and standard deviation 2 days, discretized over lags of 1--21 days and normalized to sum to one.
+
+
+
+\subsection{Event parameterization}
+
+Each event modified the baseline reproduction number through
+
+\begin{equation}
+R(t;\theta)
 =
-\frac{1}{7}
-\left[
-\frac{\delta U(t+7)}
-{U(t+7)+c}
+R_0(t)m(t;\theta),
+\end{equation}
+
+where
+
+\[
+\theta=(a,\tau)
+\]
+
+contains the peak proportional change in \(R_t\) (\(a\)) and the event duration (or rollout timescale) (\(\tau\)).
+
+Three stylized transmission perturbations were considered.
+
+\paragraph{Mass gathering.}
+
+A transient increase in transmission was represented as
+
+\[
+m(t;\theta)
+=
+1
++
+a
+h_\tau(t-t_0),
+\]
+
+where \(h_\tau\) is a smoothed finite-duration window normalized to have unit maximum.
+
+\paragraph{Temporary lockdown.}
+
+A transient reduction in transmission was represented as
+
+\[
+m(t;\theta)
+=
+1
 -
-\frac{\delta U(t)}
-{U(t)+c}
-\right].
+a
+h_\tau(t-t_0),
 \]
 
-If the denominator varies slowly over a local interval, so that
+using the same normalized event window.
+
+\paragraph{Vaccination rollout.}
+
+Vaccination was represented by a monotone rollout curve,
+
 \[
-U(t+7)+c
-\approx
-U(t)+c
-\approx
-q(t),
-\]
-then
-\[
-\delta r_7(t)
-\approx
-\frac{
-\delta U(t+7)-\delta U(t)
-}{
-7q(t)
-}.
-\]
-The corresponding temporal-difference operator has frequency response
-\[
-H_7(f)
+m(t;\theta)
 =
-\frac{
-e^{2\pi i 7f}-1
-}{7},
+1
+-
+a
+C_\tau(t),
 \]
-with magnitude
+
+where \(C_\tau(t)\) is a normalized logistic coverage curve increasing from 0 to 1 over the rollout period.
+
+The event window \(h_\tau\) was constructed using two opposing logistic transitions,
+
 \[
-|H_7(f)|
+h_\tau(t)
 =
-\frac{
-2|\sin(7\pi f)|
-}{7}.
+\sigma\!\left(
+\frac{t-t_{\rm start}}{e}
+\right)
+-
+\sigma\!\left(
+\frac{t-t_{\rm end}}{e}
+\right),
 \]
-For low frequencies,
+
+where
+
 \[
-|H_7(f)|
-\approx
-2\pi |f|,
+\sigma(x)
+=
+\frac1{1+e^{-x}},
 \]
-so the operator suppresses nearly constant components and increases its
-sensitivity as frequency moves away from zero. Relative to summaries of the
-overall level or broad epidemic-wave shape, the growth-rate calculation
-therefore places greater emphasis on short-timescale differences in the
-reconstructed trajectory.
 
-The five-day moving average subsequently applied to the estimated growth rate
-attenuates the highest-frequency numerical variation, but it does not remove
-the underlying dependence of local growth estimates on upstream components
-that are more weakly transmitted through the delay process.
+followed by normalization to unit maximum.
+
+The vaccination rollout curve was generated using a logistic function centered at the midpoint of the rollout period and linearly rescaled so that
+
+\[
+C_\tau(t_{\rm start})=0,
+\qquad
+C_\tau(t_{\rm end})=1.
+\]
 
 
-Peak timing and peak magnitude are nonlinear global functionals and do not
-possess a fixed linear transfer function analogous to \(H_7(f)\). Their
-relative stability in Fig.~\ref{fig:epi-features} is therefore an empirical
-property of the admissible reconstruction family considered here, rather than
-a universal theorem that peak summaries are always identifiable. The analysis
-shows that, for this epidemic series and these reconstruction classes, the
-broad peak structure is considerably more stable than the local growth-rate
-trajectory.
+
+\subsection{Renewal simulation}
+
+For every candidate event profile,
+
+\[
+R(t;\theta)
+=
+R_0(t)m(t;\theta),
+\]
+
+the corresponding incidence trajectory was generated recursively using
+
+\begin{equation}
+U(t;\theta)
+=
+R(t;\theta)
+\sum_k
+w_k
+U(t-k;\theta).
+\end{equation}
+
+The first generation-interval window was initialized using the baseline trajectory. Consequently, within each event family every candidate profile was generated by perturbing the same baseline epidemic through the same renewal process. Differences across the event-identifiability landscape therefore arose solely from differences in the event parameterization under a common epidemic and observation setting.
+
+
+
+\subsection{Observation model}
+
+The downstream conditional mean was obtained through convolution with a common reporting-delay distribution,
+
+\[
+D(t;\theta)
+=
+p
+(U*g)(t),
+\]
+
+where \(p=1\) in all controlled simulations.
+
+The delay distribution was modeled by a discretized lognormal distribution with mean 7 days, standard deviation 6 days, and maximum delay 40 days.
+
+Full linear convolution was retained throughout,
+
+\[
+D
+=
+U*g,
+\]
+
+rather than truncating the convolution to the original observation window. This preserves the exact Fourier relationship
+
+\[
+\widehat D
+=
+\widehat G
+\widehat U
+\]
+
+after zero-padding and ensures exact agreement between the time-domain and spectral implementations of the separability functional.
+
+
+
+\subsection{Negative-binomial observations}
+
+Illustrative observations were generated independently from
+
+\[
+Y_t
+\sim
+\mathrm{NB}
+(\mu_t,\kappa),
+\]
+
+where
+
+\[
+\mu_t=D(t;\theta),
+\]
+
+and
+
+\[
+\mathrm{Var}(Y_t)
+=
+\mu_t
++
+\frac{\mu_t^2}{\kappa}.
+\]
+
+A common dispersion parameter
+
+\[
+\kappa=20
+\]
+
+was used throughout all simulations.
+
+One synthetic realization was generated from each reference event and displayed in Fig.~\ref{fig:event-impact} only to illustrate the scale of observational variability. All identifiability calculations were performed using the corresponding downstream conditional means rather than the sampled observations.
+
+
+
+\subsection{Reference event profiles}
+
+The reference event profiles corresponded to a peak proportional \(50\%\) change in \(R_t\).
+
+The reference durations were
+
+\[
+3~\text{days},
+\qquad
+10~\text{days},
+\qquad
+60~\text{days},
+\]
+
+for the mass gathering, temporary lockdown, and vaccination rollout, respectively.
+
+Candidate event landscapes were evaluated over
+
+\[
+a\in[0.05,0.90]
+\]
+
+and event-specific duration grids covering
+
+\[
+1\!-\!30,
+\qquad
+3\!-\!60,
+\qquad
+10\!-\!120
+\]
+
+days for the three event classes.
+
+
+
+\subsection{Construction of the event-identifiability landscapes}
+
+For every point on the parameter grid,
+
+\[
+\theta=(a,\tau),
+\]
+
+the corresponding incidence trajectory was generated through the renewal model and mapped to the downstream conditional mean.
+
+The event-identifiability landscape was then computed using
+
+\[
+J_{\rm event}
+(\theta,\theta^\ast)
+=
+\int
+\frac{
+|p\widehat G(f)|^2
+|\Delta\widehat U(f)|^2
+}
+{N(f)}
+\,df,
+\]
+
+where
+
+\[
+\Delta U
+=
+U(\theta)-U(\theta^\ast).
+\]
+
+Thus every point in the landscape represents the downstream separability between a candidate event profile and the specified reference profile.
+
+
+
+\subsection{Selection of illustrative alternatives}
+
+For each event class, one representative alternative was selected automatically for visualization.
+
+Candidates were restricted to those lying immediately outside the sufficient non-identifiability region,
+
+\[
+J_{\rm threshold}
+<
+J_{\rm event}
+\le
+3J_{\rm threshold},
+\]
+
+while satisfying minimum parameter separation from the reference and excluding points near the parameter-space boundary.
+
+Among the remaining candidates, the displayed example was chosen to maximize the relative upstream root-mean-square difference from the reference trajectory. This procedure produces examples with substantial differences in transmission dynamics while remaining close to the theoretical non-identifiability boundary.
+
+
