@@ -1,0 +1,81 @@
+% ====== Packages ======
+%\documentclass[10pt]{article}
+\documentclass[10pt,twocolumn]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{amsmath, amssymb}
+\usepackage{amsthm}
+\usepackage{float}
+\usepackage{url}
+\newtheorem{lemma}{Lemma}[section]
+\newtheorem{proposition}[lemma]{Proposition}
+\newtheorem{remark}[lemma]{Remark}
+\usepackage{authblk}
+\usepackage{geometry}
+\usepackage{comment}
+\usepackage{times} % or newtxtext,newtxmath for more professional fonts
+\usepackage{abstract}
+\usepackage{cuted}
+\usepackage{caption}  
+\usepackage{booktabs}
+
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+% ====== Page layout ======
+\geometry{margin=1in}
+
+% ====== Title format (optional) ======
+\renewcommand{\abstractnamefont}{\normalfont\bfseries}
+\renewcommand{\abstracttextfont}{\normalfont}
+
+\title{Delay distributions limit the identifiability of rapid variations in epidemics}
+\author[1]{Jingjing Tang}
+\author[2]{Bryan Wilder}
+\author[2]{Roni Rosenfeld}
+
+\affil[1]{Computational Biology Department, Carnegie Mellon University}
+\affil[2]{Machine Learning Department, Carnegie Mellon University}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Public-health surveillance systems rely on downstream indicators to infer latent infection incidence, but delays and observation noise provide only an indirect and temporally distorted view of the underlying epidemic process. Reconstructing upstream epidemic trajectories from these observations is therefore an ill-posed inverse problem, in which different reconstruction assumptions may produce different trajectories that remain consistent with the observed data. Here, we develop a general spectral framework that quantifies the statistical distinguishability of candidate upstream trajectories under delayed and noisy observations. We show that epidemiological delay distributions impose a frequency-dependent temporal resolution limit on epidemic surveillance, fundamentally constraining the distinguishability of rapid upstream variation. This limitation propagates to epidemiological inference, making some quantities substantially more sensitive to reconstruction assumptions than others and rendering distinct event-impact profiles difficult to distinguish from downstream observations.
+\end{abstract}
+
+
+\input{introduction}
+\input{methods}
+%\input{results}
+\input{results}
+\input{conclusion and discussion}
+
+
+\section*{Data Availability}
+
+The code used to generate all figures and analyses is publicly available at
+\url{https://github.com/jingjtang/spectral-identifiability}.
+
+\section*{Acknowledgments}
+We thank Valerie Ventura, Logan Brooks, Will Townes, and Ryan Tibshirani for several enlightening conversations.
+
+
+
+\bibliographystyle{plain} % or abbrv, IEEEtran, etc.
+\bibliography{refs}
+
+\clearpage
+
+\appendix
+
+\input{Appendix_S1}
+\input{Appendix_S2}
+\input{Appendix_S3}
+\input{Appendix_S4}
+\input{Appendix_S5}
+\end{document}

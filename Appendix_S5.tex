@@ -1,0 +1,102 @@
+\renewcommand{\thesection}{S\arabic{section}}
+\setcounter{section}{4}
+\section{Sensitivity Analysis}
+\label{sec:Appendix_S5}
+
+The preceding analyses treat the delay distribution \(g(\tau)\) as known. In practice, epidemiological delay distributions are estimated from finite data and may be affected by sampling variability, right truncation, and reporting incompleteness. Uncertainty in the location or dispersion of the delay distribution changes its frequency response \(\lvert \widehat G(f) \rvert^2\), and therefore changes the amount of upstream spectral variation that remains distinguishable after delayed observation.
+
+We examined how the single-frequency identifiability boundary varies across plausible delay distributions and under local misspecification of empirically estimated delay parameters. For an upstream perturbation with period \(T\), the corresponding frequency is
+\[
+f_T = \frac{1}{T}.
+\]
+Under the additive Gaussian observation model used for this sensitivity analysis, the non-identifiability threshold is
+\[
+\tau_{\alpha}=4(1-\alpha)^2.
+\]
+The minimum required frequency-domain contrast-to-noise ratio for statistical distinguishability is therefore
+\begin{equation}
+Q_{\min}(T;g)
+=
+\frac{\tau_{\alpha}}
+{p^2\left\lvert \widehat G(1/T)\right\rvert^2}.
+\label{eq:sensitivity_qmin}
+\end{equation}
+We set \(\alpha=0.20\), giving \(\tau_{\alpha}=2.56\), and fixed the observation probability at \(p=1\). Larger values of \(Q_{\min}\) indicate that greater upstream spectral contrast relative to the effective downstream noise level is required for distinguishability.
+
+We evaluated Eq.~\eqref{eq:sensitivity_qmin} for perturbation periods of 3, 7, and 14 days across a family of lognormal delay distributions. Each delay distribution was parameterized by its median delay and dispersion factor,
+\[
+\operatorname{median}(g)=\exp(\mu_{\log}),
+\qquad
+d_g=\exp(\sigma_{\log}),
+\]
+where \(\mu_{\log}\) and \(\sigma_{\log}\) are the mean and standard deviation of the logarithm of the delay. We parameterized each lognormal delay distribution by its
+median delay and dispersion factor, consistent with the
+parameterization used by ~\cite{lessler2009incubation}. The resulting surfaces in Figures~\ref{fig:delay-sensitivity}A--C show
+\[
+\log_{10} Q_{\min}(T;g)
+\]
+over the delay-parameter space.
+
+The required contrast-to-noise ratio is generally larger for broader delay distributions and for shorter-period perturbations. This pattern follows directly from the stronger attenuation of high-frequency variation by dispersed delay kernels. The 3-day perturbation is therefore substantially more sensitive to the assumed delay distribution than the 7-day and 14-day perturbations. In some regions of parameter space, relatively modest changes in the delay parameters produce large multiplicative changes in the contrast required for distinguishability.
+
+To place these theoretical surfaces in an epidemiological context, we overlaid representative empirical delay estimates. These included exposure-to-symptom-onset distributions and symptom-onset-to-report distributions from several infectious diseases. The empirical estimates occupy different regions of the delay-parameter space and consequently imply different levels of attenuation at the same perturbation frequency. Long and dispersed reporting delays tend to require substantially greater upstream contrast for distinguishing rapid variation than shorter and more concentrated delays.
+
+We next quantified local sensitivity around each empirical delay estimate. Let \(m_0\) and \(d_0\) denote the original median delay and dispersion factor, respectively. For median misspecification, we evaluated
+\[
+m = m_0(1+\epsilon),
+\qquad
+d=d_0,
+\]
+whereas for dispersion misspecification we evaluated
+\[
+m=m_0,
+\qquad
+d=d_0(1+\epsilon),
+\]
+with
+\[
+\epsilon\in[-0.30,0.30].
+\]
+Parameter combinations yielding an invalid lognormal dispersion factor, \(d\leq 1\), were excluded.
+
+For each perturbed delay distribution, we recomputed the theoretical single-frequency threshold in Eq.~\eqref{eq:sensitivity_qmin}. Sensitivity was summarized relative to the threshold under the original empirical delay estimate:
+\begin{equation}
+\Delta\log_{10} Q_{\min}
+=
+\log_{10}
+\left[
+\frac{Q_{\min}(T;g_{\epsilon})}
+     {Q_{\min}(T;g_{0})}
+\right],
+\label{eq:sensitivity_relative_qmin}
+\end{equation}
+where \(g_0\) is the original delay distribution and \(g_{\epsilon}\) is the distribution obtained after perturbing either its median or dispersion. Thus,
+\[
+\Delta\log_{10}Q_{\min}=0
+\]
+corresponds to the original empirical estimate, positive values indicate a higher required contrast-to-noise ratio, and negative values indicate a lower required ratio.
+
+Figures~\ref{fig:delay-sensitivity}D--F show the effects of median-delay misspecification. The direction and magnitude of the response depend on both the empirical delay distribution and the perturbation period. The largest changes generally occur for 3-day variation, whereas the required contrast for 14-day variation is comparatively less sensitive to moderate changes in the assumed median delay.
+
+Figures~\ref{fig:delay-sensitivity}G--I show the corresponding effects of dispersion misspecification. Increasing the dispersion factor generally increases the required contrast-to-noise ratio because a broader delay distribution more strongly attenuates rapid upstream variation. This effect is again most pronounced for the 3-day perturbation and progressively weaker for the 7-day and 14-day perturbations.
+
+Overall, uncertainty in the delay distribution changes the quantitative location of the single-frequency identifiability boundary but does not alter the principal qualitative conclusion: rapid upstream variation is substantially more difficult to distinguish than slower variation after delayed observation. Inference concerning short-timescale epidemic dynamics is therefore especially sensitive to uncertainty in the assumed delay kernel and should be interpreted together with uncertainty in the estimated delay parameters.
+
+\begin{figure*}[!t]
+    \centering
+    \includegraphics[width=\textwidth]
+    {figs/sensitivity_analysis.pdf}
+    \caption{
+    \textbf{Sensitivity of single-frequency identifiability to uncertainty in the delay distribution.}
+    (A--C) Theoretical sensitivity surfaces showing
+    \(\log_{10} Q_{\min}\), where
+    \(Q_{\min}=4(1-\alpha)^2/
+    \{p^2\lvert\widehat G(1/T)\rvert^2\}\),
+    across lognormal delay distributions parameterized by median delay and dispersion factor. Results are shown for perturbation periods \(T\) of 3, 7, and 14 days, with \(\alpha=0.20\) and \(p=1\). Colored points denote representative empirical exposure-to-onset and onset-to-report delay estimates.
+    (D--F) Relative change in the required contrast-to-noise ratio after perturbing the median delay by up to \(\pm30\%\) while holding the dispersion factor fixed. Curves show
+    \(\log_{10}(Q_{\min}/Q_{\min,0})\),
+    where \(Q_{\min,0}\) is the value under the original empirical delay estimate.
+    (G--I) Corresponding relative change after perturbing the dispersion factor by up to \(\pm30\%\) while holding the median delay fixed. Sensitivity is greatest for rapid perturbations and generally decreases as the perturbation period increases.
+    }
+    \label{fig:delay-sensitivity}
+\end{figure*}
