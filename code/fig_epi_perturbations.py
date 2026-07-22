@@ -7,14 +7,14 @@ Controlled synthetic comparison for event-impact identifiability.
 Design principle:
     same baseline, same delay kernel, same observation noise, and the same
     epidemiologically interpretable peak proportional change in Rt across
-    mass gathering, short intervention, and vaccination rollout scenarios.
+    mass gathering, temporary lockdown, and vaccination rollout scenarios.
 
 Parameterization:
 1. The horizontal axis is event duration or rollout duration in days.
 2. The vertical axis is the peak proportional change in Rt:
        effect_size = 0.40
    means a maximum 40% increase in Rt for a mass gathering, or a maximum
-   40% reduction in Rt for an intervention or vaccination rollout.
+   40% reduction in Rt for a temporary lockdown or vaccination rollout.
 3. No event-specific amplitude constants or total-impact calibration are used.
 4. Each event class generates its own controlled synthetic observations from
    its reference downstream mean under the same delay and noise model.
@@ -25,12 +25,13 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.patheffects as pe
 from matplotlib.lines import Line2D
-from scipy.stats import lognorm, gamma
-from scipy.ndimage import label
+from scipy.stats import gamma
+from scipy.ndimage import gaussian_filter, label
 from matplotlib.ticker import PercentFormatter
 
-from utils import pdf_dist_to_daily_pmf
+from utils import load_empirical_delay_pmf
 
 plt.rcParams.update({
     "font.family": "sans-serif",
@@ -60,14 +61,6 @@ plt.rcParams.update({
 # =========================================================
 # Kernels and utilities
 # =========================================================
-def make_lognormal_delay(mean_days=7.0, sd_days=6.0, max_delay=40):
-    sigma2 = np.log(1.0 + (sd_days**2) / (mean_days**2))
-    sigma = np.sqrt(sigma2)
-    mu = np.log(mean_days) - 0.5 * sigma2
-    dist = lognorm(s=sigma, scale=np.exp(mu))
-    return pdf_dist_to_daily_pmf(dist, tau_max=max_delay)
-
-
 def make_generation_interval(mean_days=5.0, sd_days=2.0, max_lag=21):
     shape = (mean_days / sd_days) ** 2
     scale = sd_days**2 / mean_days
@@ -189,7 +182,7 @@ def multiplier_mass_gathering(
     return 1.0 + effect_size * h
 
 
-def multiplier_intervention(
+def multiplier_temporary_lockdown(
     t,
     effect_size,
     duration,
@@ -201,7 +194,7 @@ def multiplier_intervention(
 
     Example:
         effect_size = 0.40
-        -> Rt decreases by at most 40% during the intervention.
+        -> Rt decreases by at most 40% during the temporary lockdown.
     """
     h = smoothed_event_window(
         t,
@@ -326,30 +319,15 @@ def sample_negative_binomial_mean_dispersion(
 
     return rng.poisson(latent_rate)
 
-def negative_binomial_effective_noise(
+def negative_binomial_finite_contrast_weights(
     D_candidate,
     D_ref,
     kappa,
 ):
     """
-    Conservative effective noise scale used in the negative-binomial
-    separability bound.
-
-    For
-
-        Var(Y_t | m_t) = m_t + m_t^2 / kappa,
-
-    define
-
-        m_min = min_t min(m_candidate(t), m_ref(t))
-
-    and
-
-        V_min = m_min + m_min^2 / kappa.
-
-    This denominator gives the quadratic upper bound on the KL divergence.
-    Using m_max would not justify the conservative testing-error bound in
-    Methods.
+    Exact finite-contrast weights for the negative-binomial separability
+    functional J = 2 KL(P_candidate || P_ref), written as
+    sum_t w_t (m_candidate(t) - m_ref(t))^2.
     """
     D_candidate = np.asarray(D_candidate, dtype=float)
     D_ref = np.asarray(D_ref, dtype=float)
@@ -362,16 +340,20 @@ def negative_binomial_effective_noise(
     if kappa <= 0:
         raise ValueError("kappa must be positive.")
 
-    m_min = min(
-        float(np.min(D_candidate)),
-        float(np.min(D_ref)),
+    eps = 1e-12
+    m0 = np.maximum(D_candidate, eps)
+    m1 = np.maximum(D_ref, eps)
+    delta = m0 - m1
+    kl = (
+        kappa * np.log((kappa + m1) / (kappa + m0))
+        + m0 * np.log((m0 * (kappa + m1)) / (m1 * (kappa + m0)))
     )
-
-    m_min_safe = max(m_min, 1e-12)
-
-    N_eff = m_min_safe + m_min_safe**2 / kappa
-
-    return N_eff, m_min
+    mbar = 0.5 * (m0 + m1)
+    local = 1.0 / (mbar + mbar**2 / kappa)
+    weights = local.copy()
+    nonzero = np.abs(delta) > 1e-10
+    weights[nonzero] = 2.0 * kl[nonzero] / (delta[nonzero] ** 2)
+    return np.maximum(weights, eps)
 
 
 def J_identifiability_nb(
@@ -387,19 +369,13 @@ def J_identifiability_nb(
 
         Var(Y_t | m_t) = m_t + m_t^2 / kappa.
 
-    For each reference--candidate pair, the effective noise scale is
-
-        N_eff = m_min + m_min^2 / kappa,
-
-    where m_min is the minimum downstream conditional mean across
-    the two hypotheses.
-
     The resulting finite-observation functional is
 
-        J = sum_t (m_candidate(t) - m_ref(t))^2 / N_eff,
+        J = sum_t w_t (m_candidate(t) - m_ref(t))^2,
 
-    where t ranges only over the observed upstream/downstream time points. The
-    convolution tail is not treated as observed data.
+    where w_t is the exact finite-contrast likelihood weight for the two
+    candidate downstream means. The convolution tail is not treated as
+    observed data.
 
     Under the sufficient testing-error bound used in Methods,
     non-identifiability is guaranteed when
@@ -428,38 +404,34 @@ def J_identifiability_nb(
     D_candidate = D_candidate_full[:T_obs]
     D_ref = D_ref_full[:T_obs]
 
-    N_eff, m_min = negative_binomial_effective_noise(
+    likelihood_weights = negative_binomial_finite_contrast_weights(
         D_candidate=D_candidate,
         D_ref=D_ref,
         kappa=kappa,
     )
 
-    J_obs = float(np.sum((D_candidate - D_ref) ** 2) / N_eff)
-    return J_obs, N_eff, m_min
+    J_obs = float(np.sum(likelihood_weights * (D_candidate - D_ref) ** 2))
+    min_mean = min(float(np.min(D_candidate)), float(np.min(D_ref)))
+    return J_obs, likelihood_weights, min_mean
 
 
-def spectral_quantities_nb(
+def spectral_quantities_event(
     delta_u,
     g,
-    N_eff,
     p=1.0,
     dt=1.0,
 ):
     """
-    Descriptive frequency quantities using the observed downstream contrast and
-    the pair-specific effective noise bound
+    Descriptive frequency quantities for the event examples.
 
-        N_eff = m_min + m_min^2 / kappa.
-
-    The returned `weighted` array is the one-sided Parseval decomposition of
-    the finite observed-window downstream contrast, so it sums exactly to the
-    time-domain J for that window.
+    The upstream curve is the one-sided spectrum of the incidence contrast.
+    The downstream curve is the corresponding one-sided spectrum after delay
+    filtering, restricted to the observed upstream time window. Likelihood
+    weighting is intentionally not applied here; separability is represented
+    separately by J_event in the landscape.
     """
     delta_u = np.asarray(delta_u, dtype=float)
     g = np.asarray(g, dtype=float)
-
-    if N_eff <= 0:
-        raise ValueError("N_eff must be positive.")
 
     T_obs = len(delta_u)
     delta_d_obs = p * causal_convolve(delta_u, g)[:T_obs]
@@ -476,14 +448,13 @@ def spectral_quantities_nb(
         * np.abs(delta_u_fft) ** 2
     )
 
-    weighted = (
+    downstream_power = (
         dt / T_obs
         * weights
         * np.abs(delta_d_fft) ** 2
-        / N_eff
     )
 
-    return freqs, raw_power, weighted
+    return freqs, raw_power, downstream_power
 
 
 def choose_low_separability_high_contrast_example(
@@ -499,6 +470,7 @@ def choose_low_separability_high_contrast_example(
     example_J_multiplier=3.0,
     min_param_distance=0.03,
     interior_margin=0.02,
+    prefer_upper_right=False,
 ):
     """
     Select an illustrative alternative outside the sufficient
@@ -581,15 +553,20 @@ def choose_low_separability_high_contrast_example(
 
             # Upstream contrast is the primary criterion.
             # Parameter distance is only a small tie-breaker.
+            upper_right_score = (
+                ((X[iy, ix] - x_grid.min()) / x_span)
+                + ((Y[iy, ix] - y_grid.min()) / y_span)
+            )
             score[iy, ix] = (
                 relative_u_rmse
                 + 0.01 * param_distance[iy, ix]
+                + (0.40 * upper_right_score if prefer_upper_right else 0.0)
             )
 
     if not np.any(np.isfinite(score)) and np.any(base_admissible):
-        # The m_min-based KL denominator can make the old fixed multiplier
-        # window too narrow. Fall back to the lowest-J alternatives outside the
-        # contour so the example remains close to the theoretical boundary.
+        # If the fixed multiplier window is too narrow, fall back to the
+        # lowest-J alternatives outside the contour so the example remains
+        # close to the theoretical boundary.
         low_j_cutoff = float(np.quantile(J_grid[base_admissible], 0.20))
         admissible = base_admissible & (J_grid <= low_j_cutoff)
         for iy in range(len(y_grid)):
@@ -606,9 +583,14 @@ def choose_low_separability_high_contrast_example(
                 u_rmse = np.sqrt(np.mean((U - U_ref) ** 2))
                 relative_u_rmse = u_rmse / reference_scale
                 upstream_difference[iy, ix] = relative_u_rmse
+                upper_right_score = (
+                    ((X[iy, ix] - x_grid.min()) / x_span)
+                    + ((Y[iy, ix] - y_grid.min()) / y_span)
+                )
                 score[iy, ix] = (
                     relative_u_rmse
                     + 0.01 * param_distance[iy, ix]
+                    + (0.40 * upper_right_score if prefer_upper_right else 0.0)
                 )
 
     if not np.any(np.isfinite(score)):
@@ -640,16 +622,121 @@ def choose_low_separability_high_contrast_example(
         D_candidates[iy_alt][ix_alt],
     )
 
-def add_panel_label(ax, label, x=-0.24, y=1.12):
-    ax.text(
+def add_panel_label(fig, ax, label, *, dy=0.010, fallback_dx=0.030):
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    bbox = ax.get_position()
+    ylabel = ax.yaxis.get_label()
+    if ylabel.get_text():
+        x = ylabel.get_window_extent(renderer).transformed(fig.transFigure.inverted()).x0
+    else:
+        x = bbox.x0 - fallback_dx
+    fig.text(
         x,
-        y,
+        bbox.y1 + dy,
         label,
-        transform=ax.transAxes,
         fontsize=8.4,
         fontweight="bold",
         ha="left",
         va="bottom",
+    )
+
+
+def _segment_length(vertices):
+    vertices = np.asarray(vertices, dtype=float)
+    if len(vertices) < 2:
+        return 0.0
+    diffs = np.diff(vertices, axis=0)
+    return float(np.sum(np.sqrt(np.sum(diffs**2, axis=1))))
+
+
+def draw_main_threshold_contour(
+    ax,
+    X,
+    Y,
+    Z,
+    *,
+    level,
+    label_text,
+    color="cyan",
+    linewidth=0.70,
+):
+    """
+    Draw the principal threshold contour while suppressing small numerical
+    islands. The text is intentionally offset from the contour rather than
+    placed directly on top of the line.
+    """
+    x_grid = np.asarray(X[0, :], dtype=float)
+    y_grid = np.asarray(Y[:, 0], dtype=float)
+    Z_smooth = gaussian_filter(np.asarray(Z, dtype=float), sigma=0.55)
+    crossings_by_rank = {}
+
+    for ix, x_val in enumerate(x_grid):
+        col = Z_smooth[:, ix] - level
+        finite = np.isfinite(col)
+        crossing_values = []
+        for iy in range(len(y_grid) - 1):
+            if not (finite[iy] and finite[iy + 1]):
+                continue
+            z0 = col[iy]
+            z1 = col[iy + 1]
+            if z0 == 0:
+                crossing_values.append(y_grid[iy])
+            elif z0 * z1 < 0:
+                frac = abs(z0) / (abs(z0) + abs(z1))
+                crossing_values.append(y_grid[iy] + frac * (y_grid[iy + 1] - y_grid[iy]))
+
+        for rank, y_val in enumerate(sorted(crossing_values)):
+            crossings_by_rank.setdefault(rank, []).append((x_val, y_val))
+
+    segments = []
+    max_dx = 1.75 * float(np.median(np.diff(x_grid)))
+    for points in crossings_by_rank.values():
+        if len(points) < 2:
+            continue
+        current = [points[0]]
+        for point in points[1:]:
+            if point[0] - current[-1][0] <= max_dx:
+                current.append(point)
+            else:
+                if len(current) >= 2:
+                    segments.append(np.asarray(current, dtype=float))
+                current = [point]
+        if len(current) >= 2:
+            segments.append(np.asarray(current, dtype=float))
+
+    if not segments:
+        return
+
+    lengths = np.asarray([_segment_length(seg) for seg in segments], dtype=float)
+    max_length = float(np.max(lengths))
+    main_segments = [
+        seg for seg, seg_length in zip(segments, lengths)
+        if seg_length >= 0.25 * max_length
+    ]
+    main_segment = segments[int(np.argmax(lengths))]
+    for segment in main_segments:
+        ax.plot(
+            segment[:, 0],
+            segment[:, 1],
+            color=color,
+            lw=linewidth,
+            ls="-",
+            zorder=4,
+        )
+
+    label_idx = int(np.clip(0.68 * (len(main_segment) - 1), 0, len(main_segment) - 1))
+    xy = main_segment[label_idx]
+    ax.annotate(
+        label_text,
+        xy=(xy[0], xy[1]),
+        xytext=(5, 7),
+        textcoords="offset points",
+        ha="left",
+        va="bottom",
+        fontsize=5.6,
+        color=color,
+        zorder=6,
         clip_on=False,
     )
 # =========================================================
@@ -663,7 +750,7 @@ t = np.arange(T)
 
 EVENT_CENTER = PRE_EVENT_DAYS
 
-g = make_lognormal_delay(mean_days=7.0, sd_days=6.0, max_delay=40)
+g = load_empirical_delay_pmf(tau_max=60)
 w = make_generation_interval(mean_days=5.0, sd_days=2.0, max_lag=21)
 
 # Negative-binomial dispersion parameter.
@@ -678,8 +765,8 @@ p_conversion = 1.0
 
 alpha_target = 0.20
 J_threshold = 4 * (1 - alpha_target) ** 2
-ERROR_CONTOUR_LEVELS = [0.20, 0.10, 0.05, 0.01]
-ERROR_CONTOUR_COLORS = ["cyan", "deepskyblue", "white", "lime"]
+ERROR_CONTOUR_LEVELS = [0.20]
+ERROR_CONTOUR_COLORS = ["cyan"]
 
 rng_obs = np.random.default_rng(20260709)
 
@@ -739,7 +826,7 @@ event_specs = [
         ),
         "make_multiplier_actual": (
             lambda x_actual, effect_size:
-            multiplier_intervention(
+            multiplier_temporary_lockdown(
                 t,
                 effect_size=effect_size,
                 duration=x_actual,
@@ -747,8 +834,8 @@ event_specs = [
             )
         ),
         "selection": {
-            "example_J_multiplier": 3.0,
-            "min_param_distance": 0.03,
+            "example_J_multiplier": 8.0,
+            "min_param_distance": 0.08,
             "interior_margin": 0.04,
         },
     },
@@ -772,9 +859,10 @@ event_specs = [
             )
         ),
         "selection": {
-            "example_J_multiplier": 3.0,
-            "min_param_distance": 0.03,
+            "example_J_multiplier": 18.0,
+            "min_param_distance": 0.12,
             "interior_margin": 0.04,
+            "prefer_upper_right": True,
         },
     },
 ]
@@ -842,7 +930,7 @@ for spec in event_specs:
         for _ in y_grid
     ]
 
-    N_eff_grid = np.zeros_like(Z)
+    median_inv_weight_grid = np.zeros_like(Z)
     m_min_grid = np.zeros_like(Z)
     for ix, x_actual in enumerate(x_grid):
         for iy, effect_size in enumerate(y_grid):
@@ -856,7 +944,7 @@ for spec in event_specs:
                 effect_size,
             )
 
-            J, N_eff, m_min = J_identifiability_nb(
+            J, likelihood_weights, m_min = J_identifiability_nb(
                 U_candidate=U_candidate,
                 U_ref=U_ref,
                 g=g,
@@ -867,7 +955,7 @@ for spec in event_specs:
 
             Z[iy, ix] = J
 
-            N_eff_grid[iy, ix] = N_eff
+            median_inv_weight_grid[iy, ix] = float(np.median(1.0 / likelihood_weights))
             m_min_grid[iy, ix] = m_min
 
             D_rmse_grid[iy, ix] = downstream_rmse(
@@ -883,7 +971,7 @@ for spec in event_specs:
             U_candidates[iy][ix] = U_candidate
             D_candidates[iy][ix] = D_candidate
 
-    spec["N_eff"] = N_eff_grid
+    spec["median_inv_weight"] = median_inv_weight_grid
     spec["m_min"] = m_min_grid
 
     spec["J"] = Z
@@ -909,6 +997,7 @@ for spec in event_specs:
             example_J_multiplier=spec["selection"]["example_J_multiplier"],
             min_param_distance=spec["selection"]["min_param_distance"],
             interior_margin=spec["selection"]["interior_margin"],
+            prefer_upper_right=spec["selection"].get("prefer_upper_right", False),
         )
     )
 
@@ -924,7 +1013,7 @@ for spec in event_specs:
 
     delta_u_pair = U_alt - U_ref
 
-    J_pair, N_eff_pair, m_min_pair = J_identifiability_nb(
+    J_pair, likelihood_weights_pair, m_min_pair = J_identifiability_nb(
         U_candidate=U_alt,
         U_ref=U_ref,
         g=g,
@@ -933,28 +1022,30 @@ for spec in event_specs:
         dt=1.0,
     )
 
-    freqs, raw_power, weighted = spectral_quantities_nb(
+    freqs, raw_power, downstream_power = spectral_quantities_event(
         delta_u=delta_u_pair,
         g=g,
-        N_eff=N_eff_pair,
         p=p_conversion,
         dt=1.0,
     )
 
-    spec["N_eff_pair"] = N_eff_pair
+    spec["likelihood_weights_pair"] = likelihood_weights_pair
     spec["m_min_pair"] = m_min_pair
     spec["J_pair"] = J_pair
 
     spec["freqs"] = freqs
     spec["raw_power"] = raw_power
-    spec["weighted"] = weighted
+    spec["downstream_power"] = downstream_power
+    ref_mean_obs = np.asarray(D_ref[:len(delta_u_pair)], dtype=float)
+    ref_nb_var = ref_mean_obs + ref_mean_obs ** 2 / nb_kappa
+    spec["noise_reference"] = 2.0 * float(np.median(ref_nb_var))
 
     # ---------------------------------------------------------
     # Consistency checks
     # ---------------------------------------------------------
 
     # J computed directly from the Methods finite-observation functional.
-    J_methods, N_eff_pair, m_min_pair = J_identifiability_nb(
+    J_methods, likelihood_weights_pair, m_min_pair = J_identifiability_nb(
         U_candidate=U_alt,
         U_ref=U_ref,
         g=g,
@@ -963,28 +1054,12 @@ for spec in event_specs:
         dt=1.0,
     )
 
-    J_spectral = np.sum(weighted)
-
     delta_d_obs = (
             p_conversion
             * np.convolve(delta_u_pair, g, mode="full")
     )[:len(delta_u_pair)]
 
-    J_downstream = np.sum(
-        delta_d_obs ** 2 / N_eff_pair
-    )
-
-    if not np.isclose(
-            J_methods,
-            J_spectral,
-            rtol=1e-10,
-            atol=1e-10,
-    ):
-        raise RuntimeError(
-            f"Spectral-bin mismatch for {spec['title']}: "
-            f"J_methods={J_methods:.12f}, "
-            f"sum(weighted)={J_spectral:.12f}"
-        )
+    J_downstream = np.sum(likelihood_weights_pair * delta_d_obs ** 2)
 
     if not np.isclose(
             J_methods,
@@ -993,7 +1068,7 @@ for spec in event_specs:
             atol=1e-10,
     ):
         raise RuntimeError(
-            f"Fourier/time-domain mismatch for {spec['title']}: "
+            f"Direct J mismatch for {spec['title']}: "
             f"J_methods={J_methods:.12f}, "
             f"J_downstream={J_downstream:.12f}"
         )
@@ -1001,7 +1076,7 @@ for spec in event_specs:
     print(
         f"{spec['title']}: "
         f"m_min={m_min_pair:.3f}, "
-        f"N_eff={N_eff_pair:.3f}, "
+        f"median inverse weight={np.median(1.0 / likelihood_weights_pair):.3f}, "
         f"J={J_methods:.4f}"
     )
 
@@ -1066,7 +1141,10 @@ for spec in event_specs:
         spec["raw_power"][keep]
     )
     spectrum_values.append(
-        spec["weighted"][keep]
+        spec["downstream_power"][keep]
+    )
+    spectrum_values.append(
+        np.array([spec["noise_reference"]])
     )
 
 spectrum_values = np.concatenate(spectrum_values)
@@ -1116,6 +1194,8 @@ outer = GridSpec(
 c_ref = "tab:red"
 c_alt = "tab:blue"
 c_obs = "0.35"
+c_upstream_spectrum = "tab:orange"
+c_downstream_spectrum = "#7B3294"
 
 heatmap_axes = []
 last_im = None
@@ -1164,8 +1244,8 @@ for j, spec in enumerate(event_specs):
 
     # Theoretical sufficient non-identifiability contours:
     # J = 4(1 - alpha)^2, where alpha is the total testing-error rate.
-    # With the m_min-based NB bound these contours can be very close to the
-    # reference point, but drawing several alpha levels makes the scale explicit.
+    # Drawing several alpha levels makes the scale explicit around the
+    # reference point.
     contour_alpha_levels = [
         alpha for alpha in ERROR_CONTOUR_LEVELS
         if 0.0 <= alpha <= 1.0
@@ -1184,28 +1264,20 @@ for j, spec in enumerate(event_specs):
         if np.nanmin(spec["J_plot"]) <= level <= np.nanmax(spec["J_plot"])
     ]
     if valid_contour_pairs:
-        valid_levels = [level for level, _ in valid_contour_pairs]
-        level_to_label = {
-            level: rf"$\alpha={100 * alpha:.0f}\%$"
-            for level, alpha in valid_contour_pairs
-        }
-        contour_set = ax_hm.contour(
-            X,
-            Y,
-            spec["J_plot"],
-            levels=valid_levels,
-            colors=ERROR_CONTOUR_COLORS[:len(valid_levels)],
-            linewidths=0.85,
-            linestyles="-",
-            zorder=4,
-        )
-        ax_hm.clabel(
-            contour_set,
-            fmt=level_to_label,
-            inline=True,
-            fontsize=5.6,
-            colors="cyan",
-        )
+        for contour_index, (level, alpha) in enumerate(valid_contour_pairs):
+            contour_color = ERROR_CONTOUR_COLORS[
+                min(contour_index, len(ERROR_CONTOUR_COLORS) - 1)
+            ]
+            draw_main_threshold_contour(
+                ax_hm,
+                X,
+                Y,
+                spec["J_plot"],
+                level=level,
+                label_text=rf"$\alpha={100 * alpha:.0f}\%$",
+                color=contour_color,
+                linewidth=0.70,
+            )
 
     # Reference and selected alternative.
     ax_hm.plot(
@@ -1342,20 +1414,27 @@ for j, spec in enumerate(event_specs):
 
     eps = 1e-16
     raw = np.maximum(spec["raw_power"][keep], eps)
-    weighted = np.maximum(spec["weighted"][keep], eps)
+    downstream = np.maximum(spec["downstream_power"][keep], eps)
 
     ax_spec.plot(
         f,
         raw,
-        color="tab:orange",
+        color=c_upstream_spectrum,
         lw=0.90,
     )
 
     ax_spec.plot(
         f,
-        weighted,
-        color="black",
-        lw=0.90,
+        downstream,
+        color=c_downstream_spectrum,
+        lw=0.95,
+    )
+
+    ax_spec.axhline(
+        spec["noise_reference"],
+        color="0.35",
+        lw=0.70,
+        ls=":",
     )
 
     ax_spec.set_yscale("log")
@@ -1376,9 +1455,9 @@ for j, spec in enumerate(event_specs):
         ls="--",
     )
 
-    ax_spec.set_title("Separability", pad=2)
+    ax_spec.set_title("Spectral display", pad=2)
     ax_spec.set_xlabel(r"Frequency (day$^{-1}$)", labelpad=2)
-    ax_spec.set_ylabel("Spectral contribution", labelpad=2)
+    ax_spec.set_ylabel("Spectral power", labelpad=2)
 
     ax_spec.grid(True)
 
@@ -1401,11 +1480,11 @@ for j, spec in enumerate(event_specs):
 
     box = ax_up.get_position()
 
-    add_panel_label(ax_hm, heatmap_labels[j], x=-0.22, y=1.08)
-    add_panel_label(ax_up, upstream_labels[j], x=-0.34, y=1.12)
-    add_panel_label(ax_mult, multiplier_labels[j], x=-0.34, y=1.12)
-    add_panel_label(ax_down, downstream_labels[j], x=-0.34, y=1.12)
-    add_panel_label(ax_spec, spectrum_labels[j], x=-0.34, y=1.12)
+    add_panel_label(fig, ax_hm, heatmap_labels[j], dy=0.008)
+    add_panel_label(fig, ax_up, upstream_labels[j], dy=0.010)
+    add_panel_label(fig, ax_mult, multiplier_labels[j], dy=0.010)
+    add_panel_label(fig, ax_down, downstream_labels[j], dy=0.010)
+    add_panel_label(fig, ax_spec, spectrum_labels[j], dy=0.010)
 
 
 # =========================================================
@@ -1427,8 +1506,8 @@ for ax_hm, spec in zip(heatmap_axes, event_specs):
         spec["title"],
         ha="center",
         va="bottom",
-        fontsize=7.8,
-        fontweight="semibold",
+        fontsize=9.6,
+        fontweight="bold",
     )
 
 right_box = heatmap_axes[2].get_position()
@@ -1483,15 +1562,17 @@ handles = [
     Line2D([0], [0], marker="o", color="none",
            markerfacecolor=c_obs, markeredgecolor="none",
            markersize=3.5, alpha=0.45),
-    Line2D([0], [0], color="tab:orange", lw=1.0),
-    Line2D([0], [0], color="black", lw=1.0),
+    Line2D([0], [0], color=c_upstream_spectrum, lw=1.0),
+    Line2D([0], [0], color=c_downstream_spectrum, lw=1.0),
+    Line2D([0], [0], color="0.35", lw=0.8, ls=":"),
 ]
 labels = [
     "Reference event",
     "Alternative event",
     "Noisy synthetic observation",
     "Upstream spectral contrast",
-    r"Contribution to $J_\mathrm{event}$",
+    "Delay-filtered downstream contrast",
+    "NB variability reference",
 ]
 
 fig.legend(
@@ -1499,7 +1580,7 @@ fig.legend(
     labels,
     loc="lower center",
     bbox_to_anchor=(0.48, 0.015),
-    ncol=5,
+    ncol=3,
     frameon=False,
     handlelength=1.7,
     columnspacing=0.85,

@@ -1,20 +1,5 @@
 #!/usr/bin/env python3
-# ------------------------------------------------------------
-# Full script (UPDATED): real-data pipeline + R trendfilter + RMSE-gated U1 via near-null HF perturbation + J fractional plot
-# ------------------------------------------------------------
-# Keeps (per your request):
-#   1) Real data ingestion via epidatpy
-#   2) Real delay distributions via your catalog + pdf->daily PMF
-#   3) R genlasso trendfilter to estimate downstream latent mean mu_hat
-#
-# Replaces (per my suggestion):
-#   - Baseline upstream reconstruction: convex inverse using cvxpy
-#   - Alternative upstream U1: construct a high-frequency near-null perturbation h* (||K h*|| small),
-#     then maximize alpha subject to your RMSE gate:
-#       RMSE(K U1 - mu_target) <= gamma * noise_scale(residuals)
-#     where U1 is refined by a regularized constrained solve toward a prior (U0 + alpha h*).
-#   - J plot: uses cumulative fraction cumJ/J (no delay subplots), plus clipped integrand for readability.
-# ------------------------------------------------------------
+"""Real-data reconstruction and spectral-contrast plotting utilities."""
 
 import os
 os.environ["MPLBACKEND"] = "Agg"   # or "Agg"
@@ -27,6 +12,8 @@ from typing import Dict, Tuple, List, Optional
 
 import numpy as np
 import pandas as pd
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import matplotlib.image as mpimg
@@ -37,7 +24,6 @@ from scipy.optimize import minimize_scalar
 from scipy.signal import fftconvolve
 from scipy import sparse
 
-# You already have these in your repo
 from singlefreq_settings import (
     SINGLEFREQ_EMPIRICAL_MAX_DELAY_DAYS,
     SINGLEFREQ_INTRO_T_END,
@@ -390,7 +376,7 @@ def sample_targeted_basis_bank(
         h(t) = w(t) * [a1 sin(2π f1 t + φ1) + a2 sin(2π f2 t + φ2)]
     followed by centering and L2 normalization.
 
-    This is MUCH better aligned with your figure goal than random candidates.
+    This deterministic basis bank is more reproducible than random candidates.
     """
     t = np.arange(T, dtype=float)
 
@@ -553,7 +539,7 @@ def construct_U1_RMSE_gated_nearnull(
 
     # ------------------------------------------------------------
     # Force every candidate basis to include BOTH target frequencies.
-    # For your current use case, target_freqs = [1/7, 1/3].
+    # By default, target_freqs = [1/7, 1/3].
     # Each h is a 2-band mixture.
     # ------------------------------------------------------------
     if len(freq_grids) < 2:
@@ -807,21 +793,31 @@ def estimate_gaussian_noise_psd(resid: np.ndarray, eps: float = 1e-12):
     return np.maximum(S, eps)
 
 
-def poisson_nb_effective_noise_scale(m0: np.ndarray, m1: np.ndarray, noise: NoiseFit):
+def poisson_nb_finite_contrast_weights(m0: np.ndarray, m1: np.ndarray, noise: NoiseFit):
     m0 = np.asarray(m0, float)
     m1 = np.asarray(m1, float)
-    m_min = float(min(np.min(m0), np.min(m1)))
-    m_min_safe = max(m_min, 1e-12)
+    eps = 1e-12
+    m0_safe = np.maximum(m0, eps)
+    m1_safe = np.maximum(m1, eps)
+    delta = m0_safe - m1_safe
 
-    # The Poisson and negative-binomial KL upper bounds use the minimum
-    # candidate downstream mean over the observed window. Using m_max would not
-    # justify the conservative testing-error bound in the Methods.
     if noise.model == "poisson":
-        return m_min_safe, m_min
+        kl = m0_safe * np.log(m0_safe / m1_safe) - m0_safe + m1_safe
+        local = 1.0 / (0.5 * (m0_safe + m1_safe))
     if noise.model == "nb":
         kappa = max(float(noise.params.get("phi", 1.0)), 1e-12)
-        return m_min_safe + m_min_safe ** 2 / kappa, m_min
-    raise ValueError(f"Expected poisson or nb noise model, got {noise.model}")
+        kl = (
+            kappa * np.log((kappa + m1_safe) / (kappa + m0_safe))
+            + m0_safe
+            * np.log((m0_safe * (kappa + m1_safe)) / (m1_safe * (kappa + m0_safe)))
+        )
+        mbar = 0.5 * (m0_safe + m1_safe)
+        local = 1.0 / (mbar + mbar**2 / kappa)
+    elif noise.model != "poisson":
+        raise ValueError(f"Expected poisson or nb noise model, got {noise.model}")
+
+    weights = np.where(np.abs(delta) > 1e-10, 2.0 * kl / (delta**2), local)
+    return np.maximum(weights, eps)
 
 
 def cumulative_from_integrand(f, integrand):
@@ -879,23 +875,19 @@ def compute_J_and_integrand(
         # window to avoid boundary artifacts from convolving cropped series.
         m1 = p * convolve_mean(U0, g)[eval_mask]
         m2 = p * convolve_mean(U1, g)[eval_mask]
-        noise_scale, _ = poisson_nb_effective_noise_scale(m1, m2, noise)
-        J_obs = float(np.sum((m2 - m1) ** 2) / max(noise_scale, 1e-12))
+        likelihood_weights = poisson_nb_finite_contrast_weights(m1, m2, noise)
+        J_obs = float(np.sum(likelihood_weights * (m2 - m1) ** 2))
 
-        integrand = (
-                (p ** 2) * A2 * delta_u_power
-                / max(noise_scale, 1e-12)
-        )
+        scale = float(np.median(1.0 / likelihood_weights))
+        integrand = (p ** 2) * A2 * delta_u_power / max(scale, 1e-12)
     elif noise.model == "nb":
         m1 = p * convolve_mean(U0, g)[eval_mask]
         m2 = p * convolve_mean(U1, g)[eval_mask]
-        noise_scale, _ = poisson_nb_effective_noise_scale(m1, m2, noise)
-        J_obs = float(np.sum((m2 - m1) ** 2) / max(noise_scale, 1e-12))
+        likelihood_weights = poisson_nb_finite_contrast_weights(m1, m2, noise)
+        J_obs = float(np.sum(likelihood_weights * (m2 - m1) ** 2))
 
-        integrand = (
-                (p ** 2) * A2 * delta_u_power
-                / max(noise_scale, 1e-12)
-        )
+        scale = float(np.median(1.0 / likelihood_weights))
+        integrand = (p ** 2) * A2 * delta_u_power / max(scale, 1e-12)
     else:
         raise ValueError(f"Unknown noise model: {noise.model}")
 
@@ -1059,15 +1051,15 @@ def plot_intro_figure(
     elif noise.model == "poisson":
         m1 = D0_w
         m2 = D1_w
-        noise_scale, _ = poisson_nb_effective_noise_scale(m1, m2, noise)
-        noise_level = float(2.0 * noise_scale)
+        likelihood_weights = poisson_nb_finite_contrast_weights(m1, m2, noise)
+        noise_level = float(2.0 * np.median(1.0 / likelihood_weights))
         noise_label = r"One-sided noise level"
 
     elif noise.model == "nb":
         m1 = D0_w
         m2 = D1_w
-        noise_scale, _ = poisson_nb_effective_noise_scale(m1, m2, noise)
-        noise_level = float(2.0 * noise_scale)
+        likelihood_weights = poisson_nb_finite_contrast_weights(m1, m2, noise)
+        noise_level = float(2.0 * np.median(1.0 / likelihood_weights))
         noise_label = "One-sided noise level"
 
     else:
@@ -1178,7 +1170,7 @@ def plot_intro_figure(
     )
 
     axA.set_ylabel("Incidence", fontsize=10)
-    axA.set_xlabel("Reference date", fontsize=10)
+    axA.set_xlabel("Date", fontsize=10)
     axA.set_xlim(t0, t1)
 
     axA.xaxis.set_major_locator(
@@ -1271,7 +1263,7 @@ def plot_intro_figure(
     )
 
     axC.set_ylabel("Incidence", fontsize=10)
-    axC.set_xlabel("Reference date", fontsize=10)
+    axC.set_xlabel("Date", fontsize=10)
     axC.set_xlim(t0, t1)
 
     axC.xaxis.set_major_locator(
@@ -1515,15 +1507,22 @@ def plot_intro_figure(
     # ------------------------------------------------------------
     # Panel letters
     # ------------------------------------------------------------
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
     for ax, letter in zip(
         [axA, axB, axC, axD, axE, axF],
         list("ABCDEF"),
     ):
-        ax.text(
-            -0.14,
-            1.03,
+        bbox = ax.get_position()
+        ylabel = ax.yaxis.get_label()
+        if ylabel.get_text():
+            x = ylabel.get_window_extent(renderer).transformed(fig.transFigure.inverted()).x0
+        else:
+            x = bbox.x0 - 0.030
+        fig.text(
+            x,
+            bbox.y1 + 0.010,
             letter,
-            transform=ax.transAxes,
             ha="left",
             va="bottom",
             fontsize=12,
@@ -1560,10 +1559,16 @@ def plot_intro_figure(
         "noise_level": noise_level,
     }
 
-def add_panel_letter(fig, ax, letter, dx=0.018, dy=0.012):
+def add_panel_letter(fig, ax, letter, dy=0.012, fallback_dx=0.030):
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
     bb = ax.get_position()
-    x = bb.x0 - 4 * dx
-    y = bb.y1
+    ylabel = ax.yaxis.get_label()
+    if ylabel.get_text():
+        x = ylabel.get_window_extent(renderer).transformed(fig.transFigure.inverted()).x0
+    else:
+        x = bb.x0 - fallback_dx
+    y = bb.y1 + dy
     fig.text(x, y, letter, fontsize=12, fontweight="bold", ha="left", va="bottom")
 
 @dataclass
@@ -1611,35 +1616,6 @@ def select_best_df_and_noise(
 
     assert best is not None
     return best
-
-
-def plot_joint_fit(
-    dates: pd.DatetimeIndex,
-    y: np.ndarray,
-    joint: JointFit,
-    title: str,
-    fig_name: str,
-    show: bool = True,
-):
-    from matplotlib.dates import MonthLocator, DateFormatter
-
-    fig, ax = plt.subplots(figsize=(12, 4))
-    ax.plot(dates, y, lw=1, label="downstream y(t)")
-    ax.plot(dates, joint.mu_hat, lw=2, label=f"trendfilter mean μ̂(t) (df≈{joint.df_used:.1f})")
-    ax.set_title(title + f" | best noise={joint.best_noise.model} | AIC={joint.best_noise.aic:.1f}")
-    ax.set_xlabel("Reference date")
-    ax.set_ylabel("value")
-    ax.xaxis.set_major_locator(MonthLocator(interval=2))
-    ax.xaxis.set_major_formatter(DateFormatter("%Y%m"))
-    ax.legend(frameon=False)
-    ax.grid(True, alpha=0.25)
-    fig.tight_layout()
-
-    outpath = FIG_DIR / fig_name
-    fig.savefig(outpath, dpi=300, bbox_inches="tight")
-    if show:
-        plt.show()
-    plt.close(fig)
 
 
 def run_real_signals_pipeline(
@@ -1700,15 +1676,6 @@ def run_real_signals_pipeline(
             f"lam≈{joint.lam_used:.3g}, noise={joint.best_noise.model}, AIC={joint.best_noise.aic:.2f}"
         )
 
-        plot_joint_fit(
-            dates,
-            y,
-            joint,
-            title=f"{sig_key}: selected full-support latent mean + noise model",
-            fig_name=f"{sig_key}_latent_mean_trendfilter.png",
-            show=True,
-        )
-
         if sig_key not in delay_pmf_by_key:
             print(f"  [skip] No delay PMF provided for '{sig_key}'.")
             continue
@@ -1763,7 +1730,7 @@ def run_real_signals_pipeline(
             f_max=0.5,
             t_start=SINGLEFREQ_INTRO_T_START,
             t_end=SINGLEFREQ_INTRO_T_END,
-            show=True,
+            show=False,
         )
 
 
@@ -1778,17 +1745,6 @@ if __name__ == "__main__":
     delay_key = 'zhang2020_cn_covid::symptom_onset_to_report::date_symptom_onset->date_case_report::lognormal'
     dist_emp = emp_subset[delay_key].dist
     g = pdf_dist_to_daily_pmf(dist_emp, tau_max=SINGLEFREQ_PMF_TAU_MAX)
-
-    #
-    # test_mean = 10.0
-    # test_sd = emp_sd
-    #
-    # g = lognormal_pmf_from_mean_sd(
-    #     mean_days=test_mean,
-    #     sd_days=test_sd,
-    #     tau_max=SINGLEFREQ_PMF_TAU_MAX,
-    # )
-    # print("synthetic g shape:", g.shape, "sum:", g.sum(), "test_mean:", test_mean, "test_sd:", test_sd)
 
     delay_pmf_by_key = {"covid_cases": g}
 

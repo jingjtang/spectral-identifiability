@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import matplotlib.ticker as mticker
@@ -497,7 +499,7 @@ ax_h14.tick_params(labelleft=False)
 # Vertical colorbar aligned with the heatmap row.
 cbar = fig.colorbar(cf, cax=cax)
 cbar.set_label(
-    '$\\log_{10}$(required\ncontrast-to-noise ratio)',
+    '$\\log_{10}$(required standardized\nupstream contrast)',
     fontsize=7,
     labelpad=16,
     rotation=270
@@ -541,7 +543,7 @@ def plot_logrelative_misspec(
 
     if show_ylabel:
         ax.set_ylabel(
-            '$\\log_{10}$(required\ncontrast-to-noise ratio)',
+            '$\\log_{10}$(required\nstandardized upstream\ncontrast)',
             labelpad=4,
             fontsize=8
         )
@@ -624,7 +626,7 @@ for ax, title in zip(
     )
 
 # Bold row headers describe the analysis represented by each row.
-row_title_x = 0.04
+row_title_x = 0.020
 for ax, title in [
     (ax_h3, "Sensitivity\nsurface"),
     (ax_m3, "Median\nmisspecification"),
@@ -648,15 +650,25 @@ panel_axes = [
     ax_m3, ax_m7, ax_m14,
     ax_d3, ax_d7, ax_d14,
 ]
+fig.canvas.draw()
+renderer = fig.canvas.get_renderer()
 for ax, label in zip(panel_axes, "ABCDEFGHI"):
-    ax.text(
-        -0.10, 1.02, label,
-        transform=ax.transAxes,
+    bbox = ax.get_position()
+    ylabel = ax.yaxis.get_label()
+    if ax in (ax_m3, ax_d3):
+        x = bbox.x0 - 0.006
+    elif ylabel.get_text():
+        x = ylabel.get_window_extent(renderer).transformed(fig.transFigure.inverted()).x0
+    else:
+        x = bbox.x0 - 0.030
+    fig.text(
+        x,
+        bbox.y1 + 0.010,
+        label,
         fontsize=10.0,
         fontweight="bold",
         ha="left",
         va="bottom",
-        clip_on=False,
         zorder=20,
     )
 

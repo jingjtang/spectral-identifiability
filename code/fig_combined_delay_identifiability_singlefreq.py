@@ -69,7 +69,7 @@ def daily_pmf_power_curve(g, freq_max=0.5, n_freq=500):
     return freq, power
 
 
-def required_snr_curve_single_frequency(
+def required_standardized_contrast_curve_single_frequency(
     g,
     T_grid,
     alpha=0.2,
@@ -79,18 +79,18 @@ def required_snr_curve_single_frequency(
     """
     Single-frequency identifiability threshold based directly on
 
-        J(f_0) = p^2 |G(f_0)|^2 * SNR(f_0),
+        J(f_0) = p^2 |G(f_0)|^2 * A_M(f_0),
 
     with f_0 = 1 / T. For the testing threshold
 
         J >= 4 (1 - alpha)^2,
 
-    the minimum required frequency-domain SNR is
+    the minimum required standardized upstream contrast is
 
-        SNR_min(f_0) = 4 (1 - alpha)^2 / (p^2 |G(f_0)|^2).
+        A_M,min(f_0) = 4 (1 - alpha)^2 / (p^2 |G(f_0)|^2).
 
-    Here SNR(f_0) is interpreted consistently with the paper as the
-    whole-window Fourier-domain signal-to-noise ratio at frequency f_0.
+    Here A_M(f_0) is a standardized single-frequency display quantity,
+    not a frequency-wise count-model likelihood denominator.
     """
     T_grid = np.asarray(T_grid, float)
     freq_grid = 1.0 / T_grid
@@ -98,8 +98,8 @@ def required_snr_curve_single_frequency(
     power = dtft_power(g, freq_grid)
     j_thresh = 4.0 * (1.0 - alpha) ** 2
 
-    snr_min = j_thresh / np.maximum((p_conv ** 2) * power, eps)
-    return snr_min, freq_grid, power
+    required_contrast = j_thresh / np.maximum((p_conv ** 2) * power, eps)
+    return required_contrast, freq_grid, power
 
 
 def _unique_legend(handles, labels):
@@ -174,11 +174,18 @@ def _style_axes(ax):
     ax.tick_params(which="both", top=False, right=False)
 
 
-def add_panel_labels_outside(fig, axes_list, labels, *, dx=0.030, dy=0.010):
+def add_panel_labels_outside(fig, axes_list, labels, *, dy=0.010):
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
     for lab, ax in zip(labels, axes_list):
         bb = ax.get_position()
+        ylabel = ax.yaxis.get_label()
+        if ylabel.get_text():
+            x = ylabel.get_window_extent(renderer).transformed(fig.transFigure.inverted()).x0
+        else:
+            x = bb.x0 - 0.030
         fig.text(
-            bb.x0 - dx, bb.y1 + dy, lab,
+            x, bb.y1 + dy, lab,
             ha="left", va="bottom",
             fontsize=12, fontweight="bold",
         )
@@ -191,7 +198,7 @@ def add_panel_labels_outside(fig, axes_list, labels, *, dx=0.030, dy=0.010):
 # Column 1: incubation
 inc_support, inc_params_df = build_lessler2009_support()
 
-# Keep your current 4 diseases from panel A
+# Diseases displayed in the exposure-to-onset row.
 inc_diseases = [
     "Influenza A",
     "Measles",
@@ -285,8 +292,8 @@ F_MAX = 0.5
 # -----------------------------
 # Row 3: identifiability threshold settings
 # Row 3: single-frequency threshold curve
-# Using the paper-level identity
-#     J(f_0) = p^2 |G(f_0)|^2 * SNR(f_0)
+# Using the paper-level single-frequency display
+#     J(f_0) = p^2 |G(f_0)|^2 * A_M(f_0)
 # with f_0 = 1 / T.
 # -----------------------------
 ALPHA = 0.2
@@ -308,19 +315,20 @@ x = np.linspace(1e-6, T_MAX, 2000)
 FIG_W, FIG_H = 8.2, 4.6
 fig = plt.figure(figsize=(FIG_W, FIG_H))
 gs = GridSpec(
-    2, 3, figure=fig,
+    2, 5, figure=fig,
     left=0.08, right=0.98, top=0.90,
     bottom=0.12,
-    wspace=0.35, hspace=0.42,
+    wspace=0.22, hspace=0.42,
+    width_ratios=[1.0, 0.14, 1.0, 0.18, 1.0],
 )
 
 ax_pdf_inc  = fig.add_subplot(gs[0, 0])
-ax_pow_inc  = fig.add_subplot(gs[0, 1])
-ax_rmin_inc = fig.add_subplot(gs[0, 2])
+ax_pow_inc  = fig.add_subplot(gs[0, 2])
+ax_rmin_inc = fig.add_subplot(gs[0, 4])
 
 ax_pdf_emp  = fig.add_subplot(gs[1, 0])
-ax_pow_emp  = fig.add_subplot(gs[1, 1])
-ax_rmin_emp = fig.add_subplot(gs[1, 2])
+ax_pow_emp  = fig.add_subplot(gs[1, 2])
+ax_rmin_emp = fig.add_subplot(gs[1, 4])
 
 
 col1_x = 0.5 * (ax_pdf_inc.get_position().x0 + ax_pdf_inc.get_position().x1)
@@ -365,10 +373,8 @@ ax_pow_emp.set_yscale("log")
 
 ax_rmin_inc.set_xlabel(r"Perturbation period $T$ (days)")
 ax_rmin_emp.set_xlabel(r"Perturbation period $T$ (days)")
-# ax_rmin_inc.set_ylabel("Contrast-to-noise\npower ratio", labelpad=2)
-# ax_rmin_emp.set_ylabel("Contrast-to-noise\npower ratio", labelpad=2)
-ax_rmin_inc.set_ylabel("Contrast-to-noise Ratio", labelpad=2)
-ax_rmin_emp.set_ylabel("Contrast-to-noise Ratio", labelpad=2)
+ax_rmin_inc.set_ylabel("Required\nstandardized contrast", labelpad=2)
+ax_rmin_emp.set_ylabel("Required\nstandardized contrast", labelpad=2)
 ax_rmin_inc.set_yscale("log")
 ax_rmin_emp.set_yscale("log")
 
@@ -391,26 +397,15 @@ for name in inc_diseases:
     ax_pow_inc.plot(f, p, linewidth=1.8, label=label, color=color)
 
     for p_val, ls in zip(P_LIST, ["-", "--"]):
-        rmin, _, _ = required_snr_curve_single_frequency(
+        rmin, _, _ = required_standardized_contrast_curve_single_frequency(
             g=g,
             T_grid=period_grid,
             alpha=ALPHA,
             p_conv=p_val,
         )
 
-        # ===== DEBUG: check scaling of p =====
-
         if p_val == 1.0:
             rmin_p1 = rmin.copy()
-
-        if p_val == 0.2:
-            ratio = rmin / rmin_p1
-
-            print("\nDEBUG ratio (p=0.2 / p=1.0):")
-            print("median ratio:", np.median(ratio))
-            print("min ratio:", np.min(ratio))
-            print("max ratio:", np.max(ratio))
-
 
         alpha_val = 1.0 if p_val == 1.0 else 0.6
         lw_val = 1.8 if p_val == 1.0 else 1.4
@@ -423,17 +418,6 @@ for name in inc_diseases:
             alpha=alpha_val,
             label=label if p_val == 1.0 else None,
         )
-
-    for T_target in [14, 21, 28]:
-        idx = np.argmin(np.abs(period_grid - T_target))
-        print(name)
-        print(
-            f"T={period_grid[idx]:.1f}, "
-            f"p=1: {rmin_p1[idx]:.6g}, "
-            f"p=0.2: {rmin[idx]:.6g}, "
-            f"ratio: {rmin[idx] / rmin_p1[idx]:.2f}"
-        )
-
 
 # ============================================================
 # Row 1 + Row 2 + Row 3: right column
@@ -453,7 +437,7 @@ for key, s in emp_items:
     ax_pow_emp.plot(f, p, linewidth=1.8, label=label, color=color)
 
     for p_val, ls in zip(P_LIST, ["-", "--"]):
-        rmin, _, _ = required_snr_curve_single_frequency(
+        rmin, _, _ = required_standardized_contrast_curve_single_frequency(
             g=g,
             T_grid=period_grid,
             alpha=ALPHA,
@@ -589,7 +573,6 @@ add_panel_labels_outside(
     fig,
     [ax_pdf_inc, ax_pow_inc, ax_rmin_inc, ax_pdf_emp, ax_pow_emp, ax_rmin_emp],
     ["A", "B", "C", "D", "E", "F"],
-    dx=0.030,
     dy=0.010,
 )
 
@@ -599,7 +582,10 @@ add_panel_labels_outside(
 # ============================================================
 
 outpath = "../figs/empirical_delays_3x2_with_rmin.pdf"
+png_outpath = "../figs/empirical_delays_3x2_with_rmin.png"
 Path("../figs").mkdir(parents=True, exist_ok=True)
 plt.savefig(outpath, bbox_inches="tight", pad_inches=0.03)
+plt.savefig(png_outpath, bbox_inches="tight", pad_inches=0.03)
 plt.close(fig)
 print(f"Saved to: {outpath}")
+print(f"Saved preview to: {png_outpath}")

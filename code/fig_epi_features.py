@@ -154,10 +154,10 @@ def build_region_payload(
         rscript_bin="Rscript",
     )
     mu_hat = joint.mu_hat
-    sigma2_eff = base.get_effective_noise_scale(mu_hat[display_mask], joint.best_noise)
+    likelihood_weight = 1.0 / base.get_variance_scale(mu_hat[display_mask], joint.best_noise)
     print(
         f"{label}: full-support df_target={joint.df_target}, df_used≈{joint.df_used:.2f}, "
-        f"noise={joint.best_noise.model}, window_sigma2_eff={sigma2_eff:.3g}"
+        f"noise={joint.best_noise.model}, median local weight={np.median(likelihood_weight):.3g}"
     )
     display_scale = max(float(np.mean(mu_hat[display_mask])), 1e-8)
     T_display = int(np.sum(display_mask))
@@ -168,8 +168,8 @@ def build_region_payload(
         upstream, fitted, theta, _, _ = base.compute_cutoff_specific_reference_strict(
             y=y, mu_hat=mu_hat, g=g, f_cut=fc, ridge_theta=1e-6
         )
-        band_display = base.analytic_band_width_time_domain(
-            T=T_display, g=g, sigma2_eff=sigma2_eff, f_cut=fc, tau=tau
+        band_display = base.analytic_band_width_likelihood(
+            T=T_display, g=g, weight=likelihood_weight, f_cut=fc, tau=tau
         )
         band = np.full_like(y, np.nan, dtype=float)
         band[display_mask] = band_display
@@ -194,8 +194,8 @@ def build_region_payload(
 
     curve_rows = []
     for fc in cutoff_curve:
-        band_display = base.analytic_band_width_time_domain(
-            T=T_display, g=g, sigma2_eff=sigma2_eff, f_cut=float(fc), tau=tau
+        band_display = base.analytic_band_width_likelihood(
+            T=T_display, g=g, weight=likelihood_weight, f_cut=float(fc), tau=tau
         )
         band = np.full_like(y, np.nan, dtype=float)
         band[display_mask] = band_display

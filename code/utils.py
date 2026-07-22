@@ -486,28 +486,6 @@ def get_variance_scale(mu_hat: np.ndarray, noise_fit: NoiseFit) -> np.ndarray:
     raise ValueError(f"Unknown noise model {noise_fit.model}")
 
 
-def get_effective_noise_scale(mu_hat: np.ndarray, noise_fit: NoiseFit) -> float:
-    """Constant Methods normalization for separability bounds.
-
-    Gaussian uses the fitted variance. Poisson and negative-binomial use the
-    minimum downstream mean because the KL upper bounds require m_min and
-    V(m_min), respectively; using a mean or maximum variance would not match
-    the conservative testing-error bound.
-    """
-    mu_hat = np.asarray(mu_hat, float)
-    if noise_fit.model == "gaussian":
-        sigma = float(noise_fit.params.get("sigma", np.std(mu_hat)))
-        return max(sigma**2, 1e-8)
-
-    m_min = max(float(np.min(mu_hat)), 1e-8)
-    if noise_fit.model == "poisson":
-        return m_min
-    if noise_fit.model == "nb":
-        phi = max(float(noise_fit.params.get("phi", 1.0)), 1e-8)
-        return m_min + (m_min**2) / phi
-    raise ValueError(f"Unknown noise model {noise_fit.model}")
-
-
 # ============================================================
 # Delay / convolution / Fourier geometry
 # ============================================================
@@ -579,36 +557,28 @@ def delay_response_rfft(g: np.ndarray, T: int) -> np.ndarray:
     return np.fft.rfft(gpad)
 
 
-def lambda_for_frequency_map(g: np.ndarray, T: int, sigma2_eff: float):
-    f_rfft = np.fft.rfftfreq(T, d=1.0)
-    G = delay_response_rfft(g, T)
-    Gpow = np.abs(G) ** 2
-    lam_map = {
-        float(f): max(float(gp / max(sigma2_eff, 1e-12)), 1e-12)
-        for f, gp in zip(f_rfft, Gpow)
-    }
-    lam_map[0.0] = 1.0 / max(sigma2_eff, 1e-12)
-    return lam_map
-
-
-def lambdas_for_basis(freqs: List[float], lam_map: Dict[float, float]) -> np.ndarray:
-    return np.array([lam_map[float(f)] for f in freqs], dtype=float)
-
-
-def analytic_band_width_time_domain(
+def analytic_band_width_likelihood(
     T: int,
     g: np.ndarray,
-    sigma2_eff: float,
+    weight: np.ndarray,
     f_cut: float,
     tau: float,
     dt: float = 1.0,
 ) -> np.ndarray:
-    lam_map = lambda_for_frequency_map(g, T, sigma2_eff)
-    B2 = np.zeros(T, dtype=float)
-    for f, psi, _ in real_fourier_basis(T=T, dt=dt, include_dc=True):
-        if f <= f_cut:
-            B2 += (psi ** 2) / lam_map[float(f)]
-    return np.sqrt(tau * B2)
+    Phi, _, _ = build_cutoff_design_matrix(T=T, f_cut=f_cut, dt=dt)
+    K = build_convolution_matrix(g, T)
+    A = K @ Phi
+    weight = np.asarray(weight, float)
+    if weight.shape != (T,):
+        raise ValueError("weight must have length T")
+    if np.any(weight <= 0) or np.any(~np.isfinite(weight)):
+        raise ValueError("weight must contain finite positive entries")
+
+    Aw = A * np.sqrt(weight)[:, None]
+    info = Aw.T @ Aw
+    info_inv = np.linalg.pinv(info, rcond=1e-10)
+    B2 = np.einsum("ij,jk,ik->i", Phi, info_inv, Phi)
+    return np.sqrt(tau * np.maximum(B2, 0.0))
 
 
 def compute_cutoff_specific_reference_strict(
@@ -659,10 +629,13 @@ def tau_from_alpha(alpha_total_error: float) -> float:
 
 def cutoff_label(fc: float) -> str:
     known = {
+        1 / 60: "1/60",
         1 / 35: "1/35",
+        1 / 30: "1/30",
         1 / 21: "1/21",
         1 / 14: "1/14",
         1 / 7: "1/7",
+        1 / 3: "1/3",
     }
     for val, lab in known.items():
         if abs(fc - val) < 1e-10:
@@ -824,9 +797,24 @@ def plot_feasible_region_v2(
     axD.set_title("Feasible region expands with cutoff")
     axD.grid(True, axis="y")
 
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
     for ax, lab in zip([axA, axB, axC, axD], "ABCD"):
-        ax.text(-0.12, 1.04, lab, transform=ax.transAxes,
-                fontweight="bold", fontsize=11, va="bottom", ha="left")
+        bbox = ax.get_position()
+        ylabel = ax.yaxis.get_label()
+        if ylabel.get_text():
+            x = ylabel.get_window_extent(renderer).transformed(fig.transFigure.inverted()).x0
+        else:
+            x = bbox.x0 - 0.030
+        fig.text(
+            x,
+            bbox.y1 + 0.010,
+            lab,
+            fontweight="bold",
+            fontsize=11,
+            va="bottom",
+            ha="left",
+        )
 
     fig.savefig(out_png, dpi=600, bbox_inches="tight")
     fig.savefig(out_pdf, bbox_inches="tight")
@@ -980,7 +968,7 @@ def plot_feasible_region_v3_single_us(
     axC.axhline(0.0, color="0.55", lw=0.8, ls="--")
     axC.set_title("Short-term growth-rate estimates")
     axC.set_ylabel("7-day log growth rate")
-    axC.set_xlabel("Reference date")
+    axC.set_xlabel("Date")
     axC.grid(True, axis="y")
     axC.xaxis.set_major_locator(MonthLocator(interval=2))
     axC.xaxis.set_major_formatter(DateFormatter("%Y%m"))
@@ -1075,11 +1063,19 @@ def plot_feasible_region_v3_single_us(
             fontsize=7.3,
         )
 
-    # Panel labels: place all labels in figure coordinates for consistent alignment.
-    def add_panel_label(fig, ax, label, dx=-0.035, dy=0.010):
+    # Panel labels: align with the visible left edge of each y-axis label.
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+
+    def add_panel_label(fig, ax, label, dy=0.010, fallback_dx=0.030):
         bbox = ax.get_position()
+        ylabel = ax.yaxis.get_label()
+        if ylabel.get_text():
+            x = ylabel.get_window_extent(renderer).transformed(fig.transFigure.inverted()).x0
+        else:
+            x = bbox.x0 - fallback_dx
         fig.text(
-            bbox.x0 + dx,
+            x,
             bbox.y1 + dy,
             label,
             fontsize=11,
@@ -1173,11 +1169,11 @@ def run_pipeline():
         cutoff_to_band = {}
 
         T = len(y)
-        sigma2_eff = get_effective_noise_scale(mu_hat[display_mask], joint.best_noise)
+        likelihood_weight = 1.0 / get_variance_scale(mu_hat[display_mask], joint.best_noise)
         print(
             f"{row_label}: best full-support trendfilter df_target={joint.df_target}, "
             f"df_used≈{joint.df_used:.2f}, noise={joint.best_noise.model}, "
-            f"window_sigma2_eff={sigma2_eff:.3g}"
+            f"median local weight={np.median(likelihood_weight):.3g}"
         )
         display_scale = max(float(np.mean(mu_hat[display_mask])), 1e-8)
         T_display = int(np.sum(display_mask))
@@ -1191,10 +1187,10 @@ def run_pipeline():
                 f_cut=fc,
                 ridge_theta=GEOM_RIDGE_THETA,
             )
-            B_fc_display = analytic_band_width_time_domain(
+            B_fc_display = analytic_band_width_likelihood(
                 T=T_display,
                 g=g,
-                sigma2_eff=sigma2_eff,
+                weight=likelihood_weight,
                 f_cut=fc,
                 tau=TAU,
                 dt=1.0,
@@ -1225,10 +1221,10 @@ def run_pipeline():
 
         band_width_curve_rows = []
         for fc in CUTOFF_CURVE:
-            B_fc_display = analytic_band_width_time_domain(
+            B_fc_display = analytic_band_width_likelihood(
                 T=T_display,
                 g=g,
-                sigma2_eff=sigma2_eff,
+                weight=likelihood_weight,
                 f_cut=float(fc),
                 tau=TAU,
                 dt=1.0,

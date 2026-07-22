@@ -114,7 +114,7 @@ def compute_delays_days(
 
 
 # ============================================================
-# Column standardization + safe guards (your existing pattern)
+# Column standardization and safe guards.
 # ============================================================
 
 def norm_col_key(c: str) -> str:
@@ -216,7 +216,7 @@ def sanity_checks(df: pd.DataFrame, name: str) -> List[str]:
 
 
 # ============================================================
-# Source reading (your existing formats)
+# Source reading utilities.
 # ============================================================
 
 def read_from_source(source: Dict[str, Any], fmt: str, read_options: Dict[str, Any]) -> pd.DataFrame:
@@ -260,7 +260,7 @@ def load_catalog(catalog_path: str | Path) -> Dict[str, Any]:
 def load_all_from_catalog(catalog: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     """
     Loads all datasets specified in the catalog config.
-    Keeps your standardization, date parsing, and meta warnings.
+    Applies standard column names, date parsing, and metadata warnings.
     """
     standard_columns: List[str] = catalog["standard_columns"]
     datasets_cfg: List[Dict[str, Any]] = catalog["datasets"]
@@ -501,28 +501,23 @@ def build_empirical_delay_support(
     keep_raw_delays: bool = False,
 ) -> Tuple[Dict[str, EmpiricalDelaySupport], pd.DataFrame]:
     """
-    Lessler-like entrypoint for your empirical data.
+    Lessler-like entry point for empirical delay data.
 
     Returns:
       support_dict: key -> EmpiricalDelaySupport (continuous dist + fitted params)
-      summary_df: the same summary table you want to save/inspect downstream
+      summary_df: summary table for downstream inspection or export
 
     Notes:
       - Supports linelist or aggregated (converted using meta['linelist'])
       - dist_family controls whether support.dist is gamma or lognorm
       - key is stable and usable for plotting selections in other scripts
     """
-    # Always build summary_df (you wanted to keep it)
     summary_df = summarize_datasets_to_table(
         datasets,
         max_delay_days=max_delay_days,
         out_csv="/tmp/_dummy.csv",  # not used; caller can save separately if desired
         min_start_date=min_start_date,
     )
-
-    # But don't actually write here—caller will call summarize_datasets_to_table with their out_csv.
-    # So we rebuild without writing by just computing in-memory again:
-    # (We will compute support directly from raw datasets, and compute median/iqr the same way.)
 
     support: Dict[str, EmpiricalDelaySupport] = {}
 
