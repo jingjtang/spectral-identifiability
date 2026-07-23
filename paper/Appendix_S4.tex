@@ -3,40 +3,43 @@
 \section{Controlled synthetic event-generation framework}
 \label{sec:Appendix_S4}
 
-This section describes the controlled synthetic framework used to construct the event-identifiability landscapes in Fig.~\ref{fig:event-impact}. The objective of these simulations was not to reproduce a specific historical epidemic, but to isolate how different event parameterizations propagate through epidemic dynamics, delay filtering, and observational noise under a common epidemic setting.
+This section describes the controlled synthetic framework used to construct the event-identifiability landscapes in Fig.~\ref{fig:event-impact}. The objective of these simulations was to isolate how different event parameterizations propagate through epidemic dynamics, delay filtering, and observational noise under a common epidemic setting.
 
 \subsection{Baseline epidemic}
 
 All event classes were evaluated using the same baseline epidemic trajectory. The baseline incidence curve was defined as a smooth bimodal epidemic,
 
 \begin{equation}
-U_0(t)
-=
+\begin{aligned}
+U_{\mathrm{base}}(t)
+&=
 35
 +
 105
 \exp\!\left[
 -\frac{(t-42)^2}{2\times16^2}
-\right]
+\right]\\
+&\quad
 +
 85
 \exp\!\left[
 -\frac{(t-88)^2}{2\times23^2}
-\right],
+\right].
+\end{aligned}
 \end{equation}
 
-evaluated over a simulation window consisting of 30 pre-event days and 120 post-event days. The event was centered at day 30.
+This baseline was evaluated over a simulation window consisting of 30 pre-event days and 120 post-event days. The transient-event profiles were centered at day 30; the vaccination-rollout profile began at day 30.
 
 The corresponding baseline reproduction-number trajectory was inferred from the renewal equation,
 
 \begin{equation}
-R_0(t)
+R_{\mathrm{base}}(t)
 =
-\frac{U_0(t)}
-{\sum_k w_kU_0(t-k)},
+\frac{U_{\mathrm{base}}(t)}
+{\sum_j w_j U_{\mathrm{base}}(t-j)},
 \end{equation}
 
-where \(w_k\) denotes the discrete generation-interval distribution. This baseline \(R_t\) trajectory served only as the reference transmission process on which event perturbations were imposed.
+where \(w_j\) denotes the discrete generation-interval distribution. This baseline \(R_t\) trajectory served only as the reference transmission process on which event perturbations were imposed.
 
 
 
@@ -48,21 +51,14 @@ Transmission dynamics followed the discrete renewal model described in the main 
 
 \subsection{Event parameterization}
 
-Each event modified the baseline reproduction number through
+Each event profile modified the baseline reproduction number through
 
 \begin{equation}
 R(t;\theta)
 =
-R_0(t)m(t;\theta),
+R_{\mathrm{base}}(t)\rho(t;\theta),
 \end{equation}
-
-where
-
-\[
-\theta=(a,\tau)
-\]
-
-contains the peak proportional change in \(R_t\) (\(a\)) and the event duration (or rollout timescale) (\(\tau\)).
+where \(\theta=(a,d)\) indexes the event profile within each event family, \(a\) is the peak proportional change in \(R_t\), and \(d\) is the event duration or rollout timescale.
 
 Three stylized transmission perturbations were considered.
 
@@ -71,29 +67,27 @@ Three stylized transmission perturbations were considered.
 A transient increase in transmission was represented as
 
 \[
-m(t;\theta)
+\rho(t;\theta)
 =
 1
 +
 a
-h_\tau(t-t_0),
+h_d(t),
 \]
-
-where \(h_\tau\) is a smoothed finite-duration window normalized to have unit maximum.
+where \(h_d\) is a smoothed finite-duration window normalized to have unit maximum.
 
 \paragraph{Temporary lockdown.}
 
 A transient reduction in transmission was represented as
 
 \[
-m(t;\theta)
+\rho(t;\theta)
 =
 1
 -
 a
-h_\tau(t-t_0),
+h_d(t),
 \]
-
 using the same normalized event window.
 
 \paragraph{Vaccination rollout.}
@@ -101,46 +95,43 @@ using the same normalized event window.
 Vaccination was represented by a monotone rollout curve,
 
 \[
-m(t;\theta)
+\rho(t;\theta)
 =
 1
 -
 a
-C_\tau(t),
+C_d(t),
 \]
+where \(C_d(t)\) is a normalized logistic coverage curve increasing from 0 to 1 over the rollout period.
 
-where \(C_\tau(t)\) is a normalized logistic coverage curve increasing from 0 to 1 over the rollout period.
-
-The event window \(h_\tau\) was constructed using two opposing logistic transitions,
+The event window \(h_d\) was constructed using two opposing logistic transitions,
 
 \[
-h_\tau(t)
+h_d(t)
 =
 \sigma\!\left(
-\frac{t-t_{\rm start}}{e}
+\frac{t-t_{\rm start}}{\eta}
 \right)
 -
 \sigma\!\left(
-\frac{t-t_{\rm end}}{e}
+\frac{t-t_{\rm end}}{\eta}
 \right),
 \]
-
-where
+where \(t_{\rm start}=t_0-d/2\), \(t_{\rm end}=t_0+d/2\), and \(\eta=1\) day is the transition width used in the displayed simulations. The logistic function is
 
 \[
 \sigma(x)
 =
 \frac1{1+e^{-x}},
 \]
-
-followed by normalization to unit maximum.
+and \(h_d\) was then normalized to have unit maximum.
 
 The vaccination rollout curve was generated using a logistic function centered at the midpoint of the rollout period and linearly rescaled so that
 
 \[
-C_\tau(t_{\rm start})=0,
+C_d(t_{\rm start})=0,
 \qquad
-C_\tau(t_{\rm end})=1.
+C_d(t_{\rm end})=1.
 \]
 
 
@@ -152,18 +143,17 @@ For every candidate event profile,
 \[
 R(t;\theta)
 =
-R_0(t)m(t;\theta),
+R_{\mathrm{base}}(t)\rho(t;\theta),
 \]
-
 the corresponding incidence trajectory was generated recursively using
 
 \begin{equation}
 U(t;\theta)
 =
 R(t;\theta)
-\sum_k
-w_k
-U(t-k;\theta).
+\sum_j
+w_j
+U(t-j;\theta).
 \end{equation}
 
 The first generation-interval window was initialized using the baseline trajectory. Consequently, within each event family every candidate profile was generated by perturbing the same baseline epidemic through the same renewal process. Differences across the event-identifiability landscape therefore arose solely from differences in the event parameterization under a common epidemic and observation setting.
@@ -175,34 +165,22 @@ The first generation-interval window was initialized using the baseline trajecto
 The downstream conditional mean was obtained through convolution with a common reporting-delay distribution,
 
 \[
-D(t;\theta)
+m(t;\theta)
 =
-p
-(U*g)(t),
+(U(\cdot;\theta)*k)(t),
 \]
+where \(k(\tau)=p\,g(\tau)\) and \(p=1\) in all controlled simulations.
 
-where \(p=1\) in all controlled simulations.
+The delay distribution was the same published COVID-19 symptom-onset-to-case-report kernel used in Fig.~\ref{fig:intro}, based on ~\cite{zhang2020evolving}. The fitted lognormal distribution was discretized into daily probabilities, truncated at 60 days, and renormalized to sum to one. Thus the event profiles and epidemic trajectories were synthetic controlled examples, whereas the reporting-delay component was anchored to the empirical surveillance delay used in the data-informed illustration.
 
-The delay distribution was modeled by a discretized lognormal distribution with mean 7 days, standard deviation 6 days, and maximum delay 40 days.
-
-Full linear convolution was retained throughout,
+Full linear convolution was retained when constructing downstream means,
 
 \[
-D
+m(\cdot;\theta)
 =
-U*g,
+U(\cdot;\theta)*k,
 \]
-
-rather than truncating the convolution to the original observation window. This preserves the exact Fourier relationship
-
-\[
-\widehat D
-=
-\widehat G
-\widehat U
-\]
-
-after zero-padding and ensures exact agreement between the time-domain and spectral implementations of the separability functional.
+and the statistical comparison was evaluated on the observed upstream time window. For spectral visualization, we computed one-sided spectra for the upstream contrast \(\Delta U\) and for the delay-filtered downstream mean contrast \(\Delta m\) on this same finite window. The zero-frequency component was omitted from the displayed spectra because it represents mean-level contrast rather than temporal variation. This finite-window calculation avoids relying on a circular-convolution approximation for the event figure.
 
 
 
@@ -216,15 +194,12 @@ Y_t
 \mathrm{NB}
 (\mu_t,\kappa),
 \]
-
 where
 
 \[
-\mu_t=D(t;\theta),
+\mu_t=m(t;\theta),
 \]
-
 and
-
 \[
 \mathrm{Var}(Y_t)
 =
@@ -238,10 +213,9 @@ A common dispersion parameter
 \[
 \kappa=20
 \]
-
 was used throughout all simulations.
 
-One synthetic realization was generated from each reference event and displayed in Fig.~\ref{fig:event-impact} only to illustrate the scale of observational variability. All identifiability calculations were performed using the corresponding downstream conditional means rather than the sampled observations.
+One synthetic realization was generated from each reference event and displayed in Fig.~\ref{fig:event-impact} to illustrate the scale of observational variability. All identifiability calculations were performed using the corresponding downstream conditional means rather than the sampled observations.
 
 
 
@@ -258,7 +232,6 @@ The reference durations were
 \qquad
 60~\text{days},
 \]
-
 for the mass gathering, temporary lockdown, and vaccination rollout, respectively.
 
 Candidate event landscapes were evaluated over
@@ -266,7 +239,6 @@ Candidate event landscapes were evaluated over
 \[
 a\in[0.05,0.90]
 \]
-
 and event-specific duration grids covering
 
 \[
@@ -276,45 +248,31 @@ and event-specific duration grids covering
 \qquad
 10\!-\!120
 \]
-
 days for the three event classes.
 
 
 
 \subsection{Construction of the event-identifiability landscapes}
 
-For every point on the parameter grid,
+For every point on the parameter grid, the corresponding incidence trajectory was generated through the renewal model and mapped to the downstream conditional mean. Each point was then compared with the specified reference profile for that event family. Let \(\theta^\ast\) denote the reference profile and \(\theta\) denote a candidate profile. To match the notation in Methods, define \(U_0(t)=U(t;\theta^\ast)\), \(U_1(t)=U(t;\theta)\), and \(m_i=(U_i*k)\), \(i\in\{0,1\}\).
 
-\[
-\theta=(a,\tau),
-\]
-
-the corresponding incidence trajectory was generated through the renewal model and mapped to the downstream conditional mean.
-
-The event-identifiability landscape was then computed using
+The event-identifiability landscape was then computed using the general finite-contrast form
 
 \[
 J_{\rm event}
-(\theta,\theta^\ast)
 =
-\int
-\frac{
-|p\widehat G(f)|^2
-|\Delta\widehat U(f)|^2
-}
-{N(f)}
-\,df,
+\Delta\mathbf m^*
+\mathbf W_{\mathcal M}(U_1,U_0)
+\Delta\mathbf m,
 \]
-
 where
 
 \[
-\Delta U
+\Delta\mathbf m
 =
-U(\theta)-U(\theta^\ast).
+\mathbf m_1-\mathbf m_0.
 \]
-
-Thus every point in the landscape represents the downstream separability between a candidate event profile and the specified reference profile.
+Thus every point in the landscape represents the downstream separability between a candidate event profile and the specified reference profile. In Fig.~\ref{fig:event-impact}, \(\mathcal M\) was instantiated as the negative-binomial observation model described above. The weight matrix \(\mathbf W_{\mathcal M}(U_1,U_0)\) was diagonal in time, with entries given by the exact finite-contrast negative-binomial likelihood weights derived in Appendix~\ref{sec:Appendix_S1}; this ordering corresponds to \(2D_{\mathrm{KL}}(P_1^{\mathcal M}\Vert P_0^{\mathcal M})\). For the spectrum panels, we plotted the upstream spectral contrast \(|\Delta\widehat U(f)|^2\) and the corresponding delay-filtered downstream mean contrast \(|\Delta\widehat m(f)|^2\), where \(\Delta U=U_1-U_0\). The horizontal reference line was set to \(2\,\mathrm{median}_t\{m_0(t)+m_0(t)^2/\kappa\}\), where \(m_0(t)\) is the reference downstream mean on the observed window. This line gives a one-sided visual scale for typical negative-binomial observation variability.
 
 
 
@@ -322,18 +280,16 @@ Thus every point in the landscape represents the downstream separability between
 
 For each event class, one representative alternative was selected automatically for visualization.
 
-Candidates were restricted to those lying immediately outside the sufficient non-identifiability region,
+Candidates were restricted to those lying outside the sufficient non-identifiability region,
 
 \[
 J_{\rm threshold}
 <
 J_{\rm event}
 \le
-3J_{\rm threshold},
+c_{\rm ex}J_{\rm threshold},
 \]
+where \(J_{\rm threshold}=4(1-\alpha)^2\) with \(\alpha=0.20\), while satisfying minimum parameter separation from the reference and excluding points near the parameter-space boundary.
+We used \(c_{\rm ex}=3\), \(8\), and \(18\) for the mass-gathering, temporary-lockdown, and vaccination-rollout examples, respectively. The larger values for the latter two examples make the displayed reference--alternative contrasts visually interpretable; the event-identifiability landscapes themselves were computed from the same \(J_{\rm event}\) criterion for all candidate profiles.
 
-while satisfying minimum parameter separation from the reference and excluding points near the parameter-space boundary.
-
-Among the remaining candidates, the displayed example was chosen to maximize the relative upstream root-mean-square difference from the reference trajectory. This procedure produces examples with substantial differences in transmission dynamics while remaining close to the theoretical non-identifiability boundary.
-
-
+Among the remaining candidates, the displayed example was chosen to maximize the relative upstream root-mean-square difference from the reference trajectory. This procedure produces examples with visible differences in transmission dynamics while keeping the alternatives in a low-separability neighborhood outside the conservative non-identifiability boundary.

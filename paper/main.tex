@@ -1,5 +1,3 @@
-% ====== Packages ======
-%\documentclass[10pt]{article}
 \documentclass[10pt,twocolumn]{article}
 \usepackage[utf8]{inputenc}
 \usepackage{graphicx}
@@ -13,7 +11,7 @@
 \usepackage{authblk}
 \usepackage{geometry}
 \usepackage{comment}
-\usepackage{times} % or newtxtext,newtxmath for more professional fonts
+\usepackage{times}
 \usepackage{abstract}
 \usepackage{cuted}
 \usepackage{caption}  
@@ -25,10 +23,8 @@
 \usepackage{array}
 
 \newcolumntype{Y}{>{\raggedright\arraybackslash}X}
-% ====== Page layout ======
 \geometry{margin=1in}
 
-% ====== Title format (optional) ======
 \renewcommand{\abstractnamefont}{\normalfont\bfseries}
 \renewcommand{\abstracttextfont}{\normalfont}
 
@@ -45,13 +41,12 @@
 \maketitle
 
 \begin{abstract}
-Public-health surveillance systems rely on downstream indicators to infer latent infection incidence, but delays and observation noise provide only an indirect and temporally distorted view of the underlying epidemic process. Reconstructing upstream epidemic trajectories from these observations is therefore an ill-posed inverse problem, in which different reconstruction assumptions may produce different trajectories that remain consistent with the observed data. Here, we develop a general spectral framework that quantifies the statistical distinguishability of candidate upstream trajectories under delayed and noisy observations. We show that epidemiological delay distributions impose a frequency-dependent temporal resolution limit on epidemic surveillance, fundamentally constraining the distinguishability of rapid upstream variation. This limitation propagates to epidemiological inference, making some quantities substantially more sensitive to reconstruction assumptions than others and rendering distinct event-impact profiles difficult to distinguish from downstream observations.
+Public-health surveillance systems rely on downstream indicators to infer latent infection incidence, but delays and observation noise provide only an indirect and temporally distorted view of the underlying epidemic process. Reconstructing upstream epidemic trajectories from these observations is therefore an ill-posed inverse problem, in which different reconstruction assumptions may produce different trajectories that remain consistent with the observed data. Here, we develop a general spectral framework that quantifies the statistical distinguishability of candidate upstream trajectories under delayed and noisy observations. We show that epidemiological delay distributions impose a frequency-dependent limit on the information that surveillance observations retain about upstream epidemic dynamics. This limitation propagates to epidemiological inference, making some quantities substantially more sensitive to reconstruction assumptions than others and rendering distinct event-impact profiles difficult to distinguish from downstream observations.
 \end{abstract}
 
 
 \input{introduction}
 \input{methods}
-%\input{results}
 \input{results}
 \input{conclusion and discussion}
 
@@ -62,7 +57,10 @@ The code used to generate all figures and analyses is publicly available at
 \url{https://github.com/jingjtang/spectral-identifiability}.
 
 \section*{Acknowledgments}
-We thank Valerie Ventura, Logan Brooks, Will Townes, and Ryan Tibshirani for several enlightening conversations.
+We thank Valerie Ventura, Logan Brooks, Will Townes, and Ryan Tibshirani for helpful discussions.
+
+This work was supported by the United States of America Department of Health and Human Services, Centers for Disease Control and Prevention, under award number U01IP001121 and contract number 75D30123C1590. Any opinions, findings, and conclusions or recommendations expressed in this material are those of the author(s) and do not necessarily reflect the views of the United States of America Department of Health and Human Services, Centers for Disease Control and Prevention.
+
 
 
 
@@ -72,7 +70,8 @@ We thank Valerie Ventura, Logan Brooks, Will Townes, and Ryan Tibshirani for sev
 \clearpage
 
 \appendix
-
+\setcounter{figure}{0}
+\renewcommand{\thefigure}{S\arabic{figure}}
 \input{Appendix_S1}
 \input{Appendix_S2}
 \input{Appendix_S3}

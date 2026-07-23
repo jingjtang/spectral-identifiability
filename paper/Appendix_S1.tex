@@ -1,97 +1,369 @@
 \renewcommand{\thesection}{S\arabic{section}}
 \setcounter{section}{0}
-
-\section{Construction of the illustrative example in Figure 1}
+\section{Likelihood basis for the spectral separability criterion}
 \label{sec:Appendix_S1}
 
-Figure~\ref{fig:intro} provides a data-informed illustration of how
-delay filtering suppresses rapid differences between candidate upstream epidemic trajectories. The figure is intended to illustrate the observation and separability framework rather than to provide a substantive reconstruction of the U.S. epidemic.
-
-\subsection{Observed downstream incidence}
-
-Daily U.S. confirmed-case incidence was obtained from the Johns Hopkins University Center for Systems Science and Engineering COVID-19 data stream \cite{dong2020interactive}, accessed through the Delphi Epidata API \cite{farrow2015delphi}. We used the national-level \texttt{jhu-csse/confirmed\_incidence\_num} signal. The complete series from April 1, 2020, through June 30, 2021, was used to estimate the smoothed downstream mean, construct the candidate upstream trajectories, and perform convolution, thereby preserving the pre-window history required for observations near the beginning of the displayed interval. The RMSE constraints, spectral quantities, and observation-variance reference reported in Fig.~\ref{fig:intro} were evaluated over the displayed period from September 1, 2020, through March 31, 2021.
-
-\subsection{Smoothed downstream mean and observation noise}
-
-To separate broad epidemic variation from day-to-day observational
-fluctuation, we estimated a smooth downstream mean \(\widehat{\mu}(t)\) using second-order trend filtering. The effective degrees of freedom were selected over a prespecified grid. Conditional on each candidate smooth mean, Gaussian, Poisson, and negative-binomial observation models were fitted, and the combination of trend-filter
-complexity and observation model was selected by the Akaike information criterion (AIC). The selected observation model and its fitted variance parameters were used to construct the one-sided observation-variance reference shown in Fig.~\ref{fig:intro}F, as defined below.
-
-\subsection{Delay distribution}
-
-The delay kernel was based on the published COVID-19
-symptom-onset-to-case-report distribution reported by Zhang et al.~\cite{zhang2020evolving}. A lognormal representation was converted to a discrete daily probability mass function by integrating the fitted distribution over consecutive one-day intervals. The kernel was truncated at 60 days and renormalized to sum to one.
-
-\subsection{Construction of the reference upstream trajectory}
-
-The reference upstream trajectory \(U_0(t)\) was obtained by solving a nonnegative regularized inverse problem. Let \(K_g\) denote the linear convolution operator induced by the delay kernel \(g\). We estimated
-\(U_0\) by minimizing
+This appendix derives the separability criterion used in Methods. We consider the simple hypotheses
 \[
-\left\|K_g U-\widehat{\mu}\right\|_2^2
-+
-\lambda\left\|\Delta^2 U\right\|_1
+H_0:U=U_0,
+\qquad
+H_1:U=U_1,
 \]
-subject to \(U(t)\geq 0\), where \(\Delta^2\) is the second-difference operator. The regularization term stabilizes the inverse problem and produces a smooth reference trajectory whose delayed projection follows the estimated downstream mean.
+and let \(P_0^{\mathcal M}\) and \(P_1^{\mathcal M}\) denote the corresponding laws of the downstream observations under observation model \(\mathcal M\).
 
-\subsection{Construction of the alternative upstream trajectory}
+\subsection{Finite-window representation}
 
-The alternative trajectory \(U_1(t)\) was constructed to differ visibly
-from \(U_0(t)\) at short temporal scales while producing a similar
-downstream projection. Candidate perturbations were formed from mixtures of sinusoidal components concentrated near frequencies corresponding to 7- and 3-day periods. For each candidate perturbation \(h(t)\), we considered
+Consider observations on a finite grid of \(T\) time points. Let \(\mathbf U_i\in\mathbb R^T\) denote the sampled upstream trajectory under \(H_i\), and let
 \[
-U_1(t)=\max\{U_0(t)+a h(t),0\}.
+\mathbf m_i=\mathbf L_k\mathbf U_i
 \]
-The amplitude \(a\) was increased to the largest value satisfying both
+be the corresponding downstream conditional mean, where \(k(\tau)=p\,g(\tau)\). Here \(\mathbf L_k\) is the finite-window linear delay-observation operator induced by the observation kernel \(k\). In the main text, the Fourier representation is used to display the temporal scales affected by delay filtering. On finite windows, this representation should be understood under a convention in which boundary effects from the causal delay convolution do not drive the spectral quantities, such as analyzing a window with sufficient temporal margins or applying an explicit finite-window convention. Under the corresponding circular representation, this operator can be written as
 \[
-\operatorname{RMSE}(K_gU_1,K_gU_0)
-\leq
-\gamma\,\operatorname{RMSE}(K_gU_0,y)
-\]
-and
-\[
-\operatorname{RMSE}(K_gU_1,y)
-\leq
-\eta\,\operatorname{RMSE}(K_gU_0,y).
-\]
-For the displayed example, \(\gamma=1\) and \(\eta=1.05\). Among feasible candidates, we selected the perturbation producing the largest visible upstream separation while retaining substantial spectral energy near the two target frequencies. The RMSE constraints were evaluated over the displayed period from September 1, 2020, through March 31, 2021.
-
-\subsection{Spectral contrast and observation-noise reference}
-
-The spectral quantities in Fig.~\ref{fig:intro}D--F were computed over the displayed period from September 1, 2020, through March 31, 2021, using the same one-sided discrete Fourier transform and frequency grid. Panel D shows the upstream spectral contrast
-\[
-P_{\Delta U}(f_m)
+\begin{aligned}
+\mathbf L_k
+&=
+\mathbf F^*\mathcal K\mathbf F,\\
+\mathcal K
+&=
+\operatorname{diag}\{\widehat k(f_k)\}_{k=0}^{T-1}
 =
-\frac{q_m}{T_w}
-\left|
-\Delta\widetilde U_m
-\right|^2,
+\operatorname{diag}\{p\widehat G(f_k)\}_{k=0}^{T-1},
+\end{aligned}
 \]
-where \(\Delta\widetilde U_m\) is the discrete Fourier transform of \(U_1-U_0\) over the displayed window, \(T_w\) is the window length, and \(q_m\) is the standard one-sided multiplicity weight. Panel E shows the squared delay attenuation
+where \(\mathbf F\) is the unitary discrete Fourier transform. Writing
 \[
-\left|\widetilde G_m\right|^2,
+\Delta\mathbf m=\mathbf m_1-\mathbf m_0,
+\qquad
+\Delta\widehat{\mathbf U}
+=
+\widehat{\mathbf U}_1-\widehat{\mathbf U}_0,
 \]
-and panel F shows the corresponding filtered spectral contrast
-\[
-p^2
-\left|\widetilde G_m\right|^2
-P_{\Delta U}(f_m).
-\]
+we have
+\begin{equation}
+\Delta\mathbf m
+=
+\mathbf F^*
+\mathcal K
+\Delta\widehat{\mathbf U}.
+\label{eq:S1-mean-difference}
+\end{equation}
 
-The horizontal line in panel F is the conservative
-observation-variance normalization placed on the one-sided scale used for interior positive frequencies. For Gaussian observations, the reference level is \(2\sigma_\varepsilon^2\). For Poisson and negative-binomial observations, it is respectively
-\[
-2m_{\min}
-\quad\text{and}\quad
-2\left(
-m_{\min}+\frac{m_{\min}^2}{\phi}
-\right),
-\]
+For a positive-semidefinite likelihood weight \(\mathbf W_{\mathcal M}(U_0,U_1)\), the same criterion can be written in the downstream mean scale as
+\begin{equation}
+J_{\mathcal M}(U_0,U_1)
+=
+\Delta\mathbf m^*
+\mathbf W_{\mathcal M}(U_0,U_1)
+\Delta\mathbf m .
+\label{eq:S1-time-J}
+\end{equation}
+Combining equations~\eqref{eq:S1-mean-difference} and \eqref{eq:S1-time-J} gives the spectral representation used in the main text,
+\begin{equation}
+J_{\mathcal M}(U_0,U_1)
+=
+\Delta\widehat{\mathbf U}^{*}
+\mathbf S_{\mathcal M}(U_0,U_1)
+\Delta\widehat{\mathbf U},
+\label{eq:S1-common-J}
+\end{equation}
 where
-\[
-m_{\min}
+\begin{equation}
+\mathbf S_{\mathcal M}(U_0,U_1)
 =
-\min_{i\in\{0,1\}}
-\min_{t\in W}
-(K_gU_i)(t)
+\mathcal K^{*}
+\mathbf F\mathbf W_{\mathcal M}(U_0,U_1)\mathbf F^{*}
+\mathcal K.
+\label{eq:S1-S-operator}
+\end{equation}
+Thus the delay distribution enters through \(\mathcal K\), whereas the observation model enters through \(\mathbf W_{\mathcal M}\).
+
+The likelihood weights derived below are directed: they correspond to the ordered comparison \(P_0^{\mathcal M}\) versus \(P_1^{\mathcal M}\). Reversing the hypotheses gives the analogous weights with \(m_0\) and \(m_1\) interchanged.
+
+\subsection{Testing error}
+
+For any decision rule \(\phi\), define the total testing error
+\[
+R(\phi) = P_0(\phi=H_1)+P_1(\phi=H_0).
 \]
-is the minimum expected downstream incidence across the two candidate trajectories over the displayed period \(W\), and \(\phi\) is the negative-binomial dispersion parameter. The factor of two accounts for the pairing of positive- and negative-frequency coefficients at interior frequencies. Panel F illustrates the frequency-wise signal term entering the separability functional, whereas the horizontal line represents its conservative variance normalization rather than a likelihood-ratio threshold.
+For two simple hypotheses,
+\[
+\inf_\phi R(\phi)
+= 1-\lVert P_0-P_1\rVert_{\mathrm{TV}}.
+\]
+Pinsker's inequality gives
+\begin{equation}
+\inf_\phi R(\phi)
+\ge
+1-
+\sqrt{\frac12D_{\mathrm{KL}}(P_0\Vert P_1)}.
+\label{eq:S1-general-Pinsker}
+\end{equation}
+The following sections show that, for the observation models used in the paper,
+\begin{equation}
+J_{\mathcal M}(U_0,U_1)
+=
+2D_{\mathrm{KL}}
+\left(
+P_0^{\mathcal M}\Vert P_1^{\mathcal M}
+\right).
+\label{eq:S1-target-equivalence}
+\end{equation}
+Substitution into equation~\eqref{eq:S1-general-Pinsker} yields the common non-identifiability bound in the main text.
+
+\subsection{Gaussian observation model}
+
+Suppose that
+\[
+\mathbf D\mid H_i
+\sim
+\mathcal N(\mathbf m_i,\mathbf C_\varepsilon),
+\qquad i\in\{0,1\},
+\]
+where \(\mathbf C_\varepsilon\) is positive definite and common to the two hypotheses. The Gaussian laws differ only in their means, so
+\begin{equation}
+D_{\mathrm{KL}}(P_0^{\mathrm G}\Vert P_1^{\mathrm G})
+=
+\frac12
+(\mathbf m_0-\mathbf m_1)^*
+\mathbf C_\varepsilon^{-1}
+(\mathbf m_0-\mathbf m_1).
+\label{eq:S1-Gaussian-KL}
+\end{equation}
+Set
+\[
+\mathbf W_{\mathrm G}
+=
+\mathbf C_\varepsilon^{-1}.
+\]
+Then
+\[
+J_{\mathrm G}(U_0,U_1) = 2D_{\mathrm{KL}}(P_0^{\mathrm G}\Vert P_1^{\mathrm G}).
+\]
+
+If the Gaussian noise is stationary, the Fourier basis diagonalizes the covariance:
+\[
+\mathbf F\mathbf C_\varepsilon\mathbf F^*
+=
+\operatorname{diag}\{S_\varepsilon(f_k)\}_{k=0}^{T-1}.
+\]
+Consequently,
+\[
+J_{\mathrm G}(U_0,U_1) =
+\sum_{k=0}^{T-1}
+\frac{|p\widehat G(f_k)|^2}{S_\varepsilon(f_k)}
+\left|
+\widehat U_1(f_k)-\widehat U_0(f_k)
+\right|^2.
+\label{eq:S1-Gaussian-frequency}
+\]
+This is the exact frequency-wise expression for stationary Gaussian observation noise.
+
+\subsection{Likelihood curvature for count observations}
+
+For the count models, assume conditionally independent observations across time and strictly positive downstream means along the line segment between the two hypotheses:
+\[
+m_s(t)=m_1(t)+s\{m_0(t)-m_1(t)\}>0,
+\qquad 0\le s\le1.
+\]
+This condition excludes singular zero-mean cases; in numerical work it can be enforced by a small positive incidence floor.
+
+Let \(P_m\) be a scalar observation law indexed by its mean \(m>0\), and suppose that the directed KL divergence can be written as the Bregman divergence generated by a twice continuously differentiable convex function \(\psi\):
+\begin{equation}
+\begin{aligned}
+d(m_0,m_1)
+&:=
+D_{\mathrm{KL}}(P_{m_0}\Vert P_{m_1})\\
+&=
+\psi(m_0)-\psi(m_1)-\psi'(m_1)(m_0-m_1).
+\end{aligned}
+\label{eq:S1-Bregman}
+\end{equation}
+Taylor's theorem with integral remainder gives
+\begin{equation}
+\begin{aligned}
+d(m_0,m_1)
+&=
+(m_0-m_1)^2
+\int_0^1
+(1-s)\\
+&\hspace{1.5cm}\times
+\psi''\{m_1+s(m_0-m_1)\}\,ds .
+\end{aligned}
+\label{eq:S1-integral-remainder}
+\end{equation}
+For a regular one-parameter exponential-dispersion family parameterized by its mean,
+\[
+\psi''(m)=\frac{1}{V(m)},
+\]
+where \(V(m)=\operatorname{Var}(D\mid m)\) is the variance function. Therefore
+\begin{equation}
+2d(m_0,m_1)
+=
+w(m_0,m_1)(m_1-m_0)^2,
+\label{eq:S1-scalar-weighted-form}
+\end{equation}
+with exact finite-contrast likelihood weight
+\begin{equation}
+w(m_0,m_1)
+=
+2\int_0^1
+\frac{1-s}{V\{m_1+s(m_0-m_1)\}}\,ds.
+\label{eq:S1-exact-weight}
+\end{equation}
+If \(m_0\) and \(m_1\) are close to a common reference value \(\bar m\), then
+\[
+w(m_0,m_1)=\frac{1}{V(\bar m)}+O(|m_1-m_0|),
+\]
+which recovers the inverse-variance Fisher-information weight as a local approximation.
+
+\subsection{Poisson observation model}
+
+Suppose that
+\[
+D(t)\mid H_i
+\sim
+\operatorname{Pois}\{m_i(t)\},
+\qquad i\in\{0,1\}.
+\]
+For scalar Poisson observations,
+\[
+d_{\mathrm P}(m_0,m_1) = m_0\log\left(\frac{m_0}{m_1}\right)+m_1-m_0.
+\]
+This is the Bregman divergence generated by
+\[
+\psi_{\mathrm P}(m)=m\log m-m,
+\qquad
+\psi_{\mathrm P}''(m)=\frac{1}{m}.
+\]
+Thus \(V_{\mathrm P}(m)=m\), and equation~\eqref{eq:S1-exact-weight} gives
+\begin{equation}
+w_{\mathrm P,t}
+=
+2\int_0^1
+\frac{1-s}{m_1(t)+s\{m_0(t)-m_1(t)\}}\,ds.
+\label{eq:S1-Poisson-weight}
+\end{equation}
+Let
+\[
+\mathbf W_{\mathrm P}
+=
+\operatorname{diag}\{w_{\mathrm P,t}\}_{t=1}^T .
+\]
+Conditional independence and equation~\eqref{eq:S1-scalar-weighted-form} imply
+\begin{equation}
+2D_{\mathrm{KL}}(P_0^{\mathrm P}\Vert P_1^{\mathrm P})
+=
+\Delta\mathbf m^*
+\mathbf W_{\mathrm P}
+\Delta\mathbf m.
+\label{eq:S1-Poisson-KL-weighted}
+\end{equation}
+Therefore,
+\[
+J_{\mathrm P}(U_0,U_1) = 2D_{\mathrm{KL}}(P_0^{\mathrm P}\Vert P_1^{\mathrm P}).
+\]
+When the two mean trajectories are locally close,
+\[
+w_{\mathrm P,t}\approx \frac{1}{\bar m(t)}.
+\]
+
+\subsection{Negative-binomial observation model}
+
+Suppose that
+\[
+D(t)\mid H_i
+\sim
+\operatorname{NB}\{m_i(t),\kappa\},
+\qquad i\in\{0,1\},
+\]
+where the dispersion parameter \(\kappa>0\) is shared by the two hypotheses and
+\[
+\begin{aligned}
+\mathbb E\{D(t)\mid H_i\}
+&=m_i(t),\\
+\operatorname{Var}\{D(t)\mid H_i\}
+&= V_{\mathrm{NB}}\{m_i(t)\}.
+\end{aligned}
+\]
+with
+\begin{equation}
+V_{\mathrm{NB}}(m)=m+\frac{m^2}{\kappa}.
+\label{eq:S1-NB-variance-function}
+\end{equation}
+For fixed \(\kappa\), the scalar directed KL divergence is the Bregman divergence generated, up to affine terms, by
+\[
+\psi_{\mathrm{NB}}(m)
+= m\log m-(m+\kappa)\log(m+\kappa),
+\]
+whose curvature is
+\[
+\psi_{\mathrm{NB}}''(m)
+=
+\frac{1}{m}-\frac{1}{m+\kappa}
+=
+\frac{1}{m+m^2/\kappa}
+=
+\frac{1}{V_{\mathrm{NB}}(m)}.
+\]
+Equation~\eqref{eq:S1-exact-weight} therefore gives
+\begin{equation}
+w_{\mathrm{NB},t}
+=
+2\int_0^1
+\frac{1-s}
+{m_s(t)+m_s(t)^2/\kappa}
+\,ds,
+\label{eq:S1-NB-weight}
+\end{equation}
+where \(m_s(t)=m_1(t)+s\{m_0(t)-m_1(t)\}\). Let
+\[
+\mathbf W_{\mathrm{NB}}
+=
+\operatorname{diag}\{w_{\mathrm{NB},t}\}_{t=1}^T .
+\]
+Conditional independence gives
+\begin{equation}
+2D_{\mathrm{KL}}(P_0^{\mathrm{NB}}\Vert P_1^{\mathrm{NB}})
+=
+\Delta\mathbf m^*
+\mathbf W_{\mathrm{NB}}
+\Delta\mathbf m.
+\label{eq:S1-NB-KL-weighted}
+\end{equation}
+Therefore,
+\[
+J_{\mathrm{NB}}(U_0,U_1) = 2D_{\mathrm{KL}}(P_0^{\mathrm{NB}}\Vert P_1^{\mathrm{NB}}).
+\]
+When the two mean trajectories are locally close,
+\[
+w_{\mathrm{NB},t}
+\approx
+\frac{1}{\bar m(t)+\bar m(t)^2/\kappa}.
+\]
+
+\subsection{Common non-identifiability threshold}
+
+For each observation model above,
+\[
+J_{\mathcal M}(U_0,U_1) = 2D_{\mathrm{KL}}
+\left(
+P_0^{\mathcal M}\Vert P_1^{\mathcal M}
+\right).
+\]
+Substituting this identity into equation~\eqref{eq:S1-general-Pinsker} gives
+\begin{equation}
+\inf_\phi R(\phi)
+\ge
+1-\frac12\sqrt{J_{\mathcal M}(U_0,U_1)}.
+\label{eq:S1-common-testing-bound}
+\end{equation}
+Thus, for any target total testing error \(\alpha\in(0,1)\),
+\begin{equation}
+J_{\mathcal M}(U_0,U_1)
+\le
+4(1-\alpha)^2
+\quad\Longrightarrow\quad
+\inf_\phi R(\phi)\ge \alpha .
+\label{eq:S1-common-threshold}
+\end{equation}
+The threshold is common across observation models because \(J_{\mathcal M}\) is defined using the likelihood geometry. The observation model affects distinguishability through \(\mathbf W_{\mathcal M}\), and the delay process affects distinguishability through \(\mathcal K\).

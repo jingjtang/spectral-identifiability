@@ -1,358 +1,37 @@
 \renewcommand{\thesection}{S\arabic{section}}
 \setcounter{section}{2}
 
-\section{Frequency-constrained reconstruction and feature analysis}
+\section{Epidemiological feature summaries for the combined illustrative example}
 \label{sec:Appendix_S3}
 
-\subsection{Data and downstream target}
-\label{sec:appendix_downstream_target}
-
-We used daily confirmed COVID-19 case incidence from the Johns Hopkins
-University Center for Systems Science and Engineering data stream, accessed
-through the Delphi Epidata API. The reconstruction analysis was performed on
-the national US series from April 1, 2020, through June 30, 2021. For
-visualization and calculation of the epidemiological feature summaries, we
-restricted the displayed interval to September 1, 2020, through March 31,
-2021.
-
-Let
-\[
-y=(y_1,\ldots,y_T)^\top
-\]
-denote the observed daily case-incidence series. Because the raw observations
-contain day-of-week effects and other short-timescale reporting variation, we
-first estimated a smooth downstream mean
-\[
-\widehat{\mu}
-=
-(\widehat{\mu}_1,\ldots,\widehat{\mu}_T)^\top
-\]
-using second-order trend filtering. Specifically, for each target effective
-degrees of freedom in
-\[
-\mathcal D
-=
-\{10,15,20,30,40,60,80,100,120\},
-\]
-we fitted a second-order trend-filtering model using the \texttt{genlasso}
-implementation in R.
-
-For each fitted mean, we evaluated Gaussian, Poisson, and
-negative-binomial observation models. The combination of trend-filtering
-degrees of freedom and observation model was selected by the Akaike
-information criterion. The fitted mean from the selected combination was used
-as the downstream reconstruction target \(\widehat{\mu}\).
-
-Let \(v_t\) denote the fitted conditional variance under the selected
-observation model. Thus,
-\[
-v_t=
-\begin{cases}
-\widehat{\sigma}^{\,2},
-&\text{Gaussian},\\[4pt]
-\widehat{\mu}_t,
-&\text{Poisson},\\[4pt]
-\widehat{\mu}_t+\widehat{\mu}_t^{\,2}/\widehat{\kappa},
-&\text{negative binomial},
-\end{cases}
-\]
-where \(\widehat{\kappa}\) is the fitted negative-binomial dispersion
-parameter. For the frequency-constrained illustration, we summarized this
-possibly time-varying variance by the effective variance
-\[
-\sigma_{\mathrm{eff}}^2
-=
-\frac{1}{T}\sum_{t=1}^{T}v_t.
-\]
-This scalar variance provides a common quadratic scale for constructing and
-visualizing the locally non-identifiable perturbation set. It is not intended
-to replace the observation-model-specific bounds derived in
-Appendix~\ref{sec:Appendix_S1}.
-
-
-\subsection{Delay kernel and discrete observation operator}
-\label{sec:appendix_delay_operator}
-
-The reconstruction used an empirical symptom-onset-to-case-report delay
-distribution for COVID-19 reported by Zhang et al. The fitted continuous
-lognormal distribution was discretized into daily probabilities,
-\[
-g_k
-=
-\Pr(k\leq \tau<k+1),
-\qquad k=0,\ldots,60,
-\]
-and renormalized so that
-\[
-\sum_{k=0}^{60}g_k=1.
-\]
-
-For an upstream incidence vector
-\[
-U=(U_1,\ldots,U_T)^\top,
-\]
-the corresponding downstream mean is
-\[
-KU,
-\]
-where \(K\in\mathbb R^{T\times T}\) is the lower-triangular causal convolution
-matrix with entries
-\[
-K_{ts}
-=
-\begin{cases}
-g_{t-s},&0\leq t-s\leq 60,\\
-0,&\text{otherwise}.
-\end{cases}
-\]
-Equivalently,
-\[
-(KU)_t
-=
-\sum_{k=0}^{\min(60,t-1)}g_kU_{t-k}.
-\]
-The finite-series calculation therefore uses causal linear convolution rather
-than circular convolution.
-
-\subsection{Frequency-constrained upstream reconstructions}
-\label{sec:appendix_cutoff_reconstruction}
-
-To isolate the effect of assumptions about admissible temporal scales, we
-represented the upstream trajectory in a real Fourier basis. Let
-\[
-\Phi_{f_c}
-=
-\begin{bmatrix}
-\phi_1 & \cdots & \phi_{q(f_c)}
-\end{bmatrix}
-\in\mathbb R^{T\times q(f_c)}
-\]
-contain the normalized constant, sine, and cosine basis vectors whose
-frequencies satisfy
-\[
-0\leq f\leq f_c.
-\]
-The basis vectors were normalized to have unit Euclidean norm. Apart from the
-constant component, each non-Nyquist Fourier frequency contributes one sine
-and one cosine basis vector.
-
-An upstream trajectory in the cutoff-specific class is written as
-\[
-U=\Phi_{f_c}\theta,
-\]
-where \(\theta\in\mathbb R^{q(f_c)}\) is the vector of Fourier coefficients.
-For each cutoff \(f_c\), the reference reconstruction was obtained by solving
-\[
-\widehat{\theta}_{f_c}
-=
-\arg\min_{\theta}
-\left\{
-\left\|
-K\Phi_{f_c}\theta-\widehat{\mu}
-\right\|_2^2
-+
-\lambda_\theta
-\sum_{j=2}^{q(f_c)}\theta_j^2
-\right\},
-\]
-subject to
-\[
-\Phi_{f_c}\theta\geq 0.
-\]
-The first coefficient, corresponding to the constant component, was excluded
-from the ridge penalty. We used the small numerical ridge parameter
-\[
-\lambda_\theta=10^{-6},
-\]
-which stabilizes the optimization without materially determining the shape of
-the solution.
-
-The resulting cutoff-specific reconstruction and its delayed projection are
-\[
-U^\star_{f_c}
-=
-\Phi_{f_c}\widehat{\theta}_{f_c},
-\qquad
-D^\star_{f_c}
-=
-KU^\star_{f_c}.
-\]
-
-We considered
-\[
-f_c\in
-\left\{
-\frac{1}{35},
-\frac{1}{14},
-\frac{1}{7}
-\right\}
-\quad\text{cycles/day}.
-\]
-These cutoffs admit variation with periods no shorter than 35, 14, and 7 days,
-respectively. The three trajectories are therefore not estimates from three
-competing epidemiological models. They form a controlled sequence of
-reconstruction classes that progressively permits additional short-timescale
-structure.
-
-\subsection{Frequency-constrained non-identifiable perturbation bands}
-\label{sec:appendix_perturbation_bands}
-
-For each cutoff-specific reference trajectory, we considered perturbations
-within the same Fourier subspace,
-\[
-\delta U
-=
-\Phi_{f_c}a,
-\]
-where \(a\in\mathbb R^{q(f_c)}\) denotes the perturbation coefficients. Under
-the effective homoscedastic quadratic approximation used for this
-visualization, the downstream separability of a perturbation is
-\[
-J(\delta U)
-=
-\frac{\|K\delta U\|_2^2}
-{\sigma_{\mathrm{eff}}^2}.
-\]
-
-To obtain an analytically interpretable frequency-domain approximation to this
-quantity, let
-\[
-G_T(f)
-=
-\sum_{k=0}^{60}g_k
-\exp(-2\pi i f k)
-\]
-denote the discrete Fourier response of the delay kernel evaluated on the
-length-\(T\) Fourier grid. For a normalized sine or cosine basis component at
-frequency \(f_j\), define
-\[
-\lambda_j
-=
-\frac{|G_T(f_j)|^2}
-{\sigma_{\mathrm{eff}}^2}.
-\]
-The separability of a perturbation is then approximated by the diagonal
-spectral quadratic form
-\[
-J(\delta U)
-\approx
-a^\top\Lambda_{f_c}a,
-\qquad
-\Lambda_{f_c}
-=
-\operatorname{diag}(\lambda_1,\ldots,\lambda_{q(f_c)}).
-\]
-
-For a target total testing error \(\alpha=0.20\), the Gaussian
-non-identifiability threshold derived in
-Appendix~\ref{sec:Appendix_S1} is
-\[
-\tau_\alpha
-=
-4(1-\alpha)^2
-=
-2.56.
-\]
-We therefore define the cutoff-specific perturbation ellipsoid
-\[
-\mathcal A_{f_c}
-=
-\left\{
-a:
-a^\top\Lambda_{f_c}a
-\leq
-\tau_\alpha
-\right\}.
-\]
-
-At each time \(t\), the largest possible absolute perturbation within this
-ellipsoid is
-\[
-B_{f_c}(t)
-=
-\sup_{a\in\mathcal A_{f_c}}
-\left|
-\phi_{f_c}(t)^\top a
-\right|,
-\]
-where
-\[
-\phi_{f_c}(t)
-=
-\left(
-\phi_1(t),\ldots,\phi_{q(f_c)}(t)
-\right)^\top.
-\]
-By the Cauchy--Schwarz inequality in the
-\(\Lambda_{f_c}\)-weighted norm,
-\[
-B_{f_c}(t)
-=
-\sqrt{
-\tau_\alpha\,
-\phi_{f_c}(t)^\top
-\Lambda_{f_c}^{-1}
-\phi_{f_c}(t)
-}.
-\]
-Equivalently,
-\[
-B_{f_c}(t)
-=
-\left[
-\tau_\alpha
-\sum_{j=1}^{q(f_c)}
-\frac{\phi_j(t)^2}{\lambda_j}
-\right]^{1/2}.
-\]
-
-The band shown in Fig.~\ref{fig:epi-features}A is
-\[
-\left[
-\max\left\{
-U^\star_{f_c}(t)-B_{f_c}(t),0
-\right\},
-\;
-U^\star_{f_c}(t)+B_{f_c}(t)
-\right].
-\]
-The lower boundary was truncated at zero to respect the nonnegativity of
-incidence.
-
-The band is a pointwise envelope of the perturbation ellipsoid rather than a
-simultaneous confidence or credible band. In particular, the perturbation
-attaining the upper or lower endpoint may differ across time points. The band
-therefore visualizes the local geometry of the non-identifiable upstream set;
-it should not be interpreted as the sampling distribution of a specific
-reconstruction estimator.
-
+Here we describe the epidemiological feature summaries in Fig.~\ref{fig:intro}G,H and explain why the seven-day growth-rate summary is especially sensitive to weakly identified high-frequency components.
 
 \subsection{Epidemiological feature summaries}
-\label{sec:Appendix_S4}
+\label{sec:appendix_feature_summaries}
 
-We evaluated three quantities derived from each cutoff-specific upstream
+We evaluated three quantities derived from each displayed upstream reference
 trajectory: epidemic peak timing, epidemic peak magnitude, and the seven-day
 log growth rate. All feature summaries were calculated over the displayed
 interval from September 1, 2020, through March 31, 2021.
 
 \subsubsection{Peak timing and peak magnitude}
 
-For each cutoff-specific reconstruction, we first formed a 14-day centered
-moving average,
+For each displayed upstream reference trajectory, we first formed a reflected
+14-day moving average,
 \[
-\widetilde U_{f_c}(t)
+\bar U^{(14)}_{f_c}(t)
 =
 \frac{1}{14}
 \sum_{s\in\mathcal W_t}
 U^\star_{f_c}(s),
 \]
-where reflection padding was used at the boundaries of the finite interval.
+where \(\mathcal W_t\) is the 14-day smoothing window used for the displayed trajectory, with reflection at the boundaries of the finite interval.
 The peak index was defined as
 \[
 t^\star_{f_c}
 =
 \arg\max_t
-\widetilde U_{f_c}(t).
+\bar U^{(14)}_{f_c}(t).
 \]
 
 For visualization, relative peak timing was calculated as
@@ -363,7 +42,7 @@ T^{\mathrm{rel}}_{f_c}
 {T_{\mathrm{disp}}-1},
 \]
 where \(T_{\mathrm{disp}}\) is the number of days in the displayed analysis
-interval.
+interval and \(t^\star_{f_c}\) is indexed from zero within that interval.
 
 The peak magnitude was evaluated from the unsmoothed cutoff-specific
 reconstruction at the peak index selected from the smoothed trajectory,
@@ -387,26 +66,22 @@ preserving the broad epidemic-wave structure.
 \subsubsection{Seven-day log growth rate}
 \label{sec:appendix_growth_rate}
 
-For each reconstructed upstream trajectory, we calculated the seven-day log
-growth rate
+For each displayed upstream reference trajectory, we calculated the seven-day
+log growth rate
 \[
 r_{7,f_c}(t)
 =
 \frac{1}{7}
-\left[
-\log\left\{
+\log
+\frac{
 U^\star_{f_c}(t+7)+c
-\right\}
--
-\log\left\{
+}{
 U^\star_{f_c}(t)+c
-\right\}
-\right],
+},
 \]
 where \(c=1\) is a numerical offset used to avoid taking the logarithm of zero.
-The resulting growth-rate trajectory was smoothed using a five-day centered
-moving average with reflection padding at the boundaries. This final
-smoothing was applied identically to all cutoff-specific trajectories.
+Values within the final seven days of the displayed interval do not have a
+forward seven-day comparison and were filled from the nearest available growth-rate values before applying the common smoothing step. The resulting growth-rate trajectory was smoothed using a reflected five-day moving average. This final smoothing was applied identically to all displayed reference trajectories.
 
 
 \subsection{Spectral sensitivity of the seven-day growth rate}
@@ -491,7 +166,7 @@ that are more weakly transmitted through the delay process.
 
 Peak timing and peak magnitude are nonlinear global functionals and do not
 possess a fixed linear transfer function analogous to \(H_7(f)\). Their
-relative stability in Fig.~\ref{fig:epi-features} is therefore an empirical
+relative stability in Fig.~\ref{fig:intro}H is therefore an empirical
 property of the admissible reconstruction family considered here, rather than
 a universal theorem that peak summaries are always identifiable. The analysis
 shows that, for this epidemic series and these reconstruction classes, the

@@ -1,143 +1,171 @@
 \section*{Methods}
 
-\subsection*{Spectral Representation for the Delay Model}
-Let \(U(t)\) denote the upstream process (e.g., latent infections) and \(D(t)\) the downstream observable (e.g., confirmed cases or deaths). Let \(g(\tau)\) be a nonnegative delay kernel supported on delays \(\tau \ge 0\) and normalized so that \(\int_0^\infty g(\tau)\, d\tau = 1\). A conversion rate $p\in(0,1]$ represents the probability that an upstream event generates a downstream observation. One common example is the ascertainment rate, which describes the proportion of latent infections ultimately recorded as confirmed cases. Because testing- or reporting-related changes typically occur on coarse temporal scales\cite{colman2023ascertainment, eales2023dynamics, ward2024real} relative to the support of $g$, we treat $p$ as locally constant.
+\subsection*{Spectral representation for the delay model}
 
-The downstream process is modeled as
+Let \(U(t)\) denote the upstream process, such as latent infection incidence, and let \(D(t)\) denote a downstream surveillance observable, such as reported cases, hospital admissions, or deaths. The delay from upstream infection to downstream observation is described by a nonnegative delay density \(g(\tau)\), supported on \(\tau\ge0\) and normalized so that \(\int_0^\infty g(\tau)\,d\tau=1\). A conversion rate \(p\in(0,1]\) represents the probability that an upstream event generates a downstream observation. One common example is the ascertainment rate, which describes the proportion of latent infections ultimately recorded as confirmed cases. Because testing- or reporting-related changes typically occur on coarse temporal scales \cite{colman2023ascertainment,eales2023dynamics,ward2024real} relative to the support of \(g\), we treat \(p\) as locally constant.
+
+We combine delay and conversion into the observation kernel
+\[
+k(\tau)=p\,g(\tau).
+\]
+The downstream conditional mean is
 \begin{equation}
-D(t)
-= (U*h)(t) + \varepsilon(t),
-\qquad
-h(\tau)=p\,g(\tau),
-\label{eq:delay-convolution}
+m(t)
+=
+\mathbb E\{D(t)\mid U\}
+=
+(U*k)(t),
+\label{eq:delay-mean}
 \end{equation}
 where \(*\) denotes convolution,
 \[
-(U*h)(t)=\int_{0}^{\infty}U(t-\tau)h(\tau)\,d\tau,
+(U*k)(t)=\int_0^\infty U(t-\tau)k(\tau)\,d\tau .
 \]
-and \(\varepsilon(t)\) is a zero-mean residual satisfying
-\(\mathbb{E}[\varepsilon(t)\mid U]=0\). Hence,
-\(\mathbb{E}[D(t)\mid U]=(U*h)(t).\) The observation model is shown schematically in Fig~\ref{fig:intro}A--C. 
-
-For additive Gaussian observation models, \(\varepsilon(t)\) corresponds directly to Gaussian noise. For count-based observation models such as Poisson or negative binomial sampling, this representation should instead be interpreted as a mean-plus-residual decomposition, where \(\varepsilon(t)\) denotes deviations from the conditional mean.
-
-Because convolution in the time domain corresponds to multiplication in the frequency domain, it is natural to examine \eqref{eq:delay-convolution} spectrally. Taking Fourier transforms yields
+Equivalently, the downstream observation can be written as
 \begin{equation}
-\widehat{D}(f)
-= \widehat{U}(f)\,\widehat{H}(f) + \widehat{\varepsilon}(f)
-= p\,\widehat{U}(f)\,\widehat{G}(f) + \widehat{\varepsilon}(f),
+D(t)=m(t)+\varepsilon(t),
+\qquad
+\mathbb E\{\varepsilon(t)\mid U\}=0.
+\label{eq:mean-residual}
+\end{equation}
+The observation model is illustrated in Fig.~\ref{fig:intro}A--C.
+
+For additive Gaussian observation models, \(\varepsilon(t)\) corresponds directly to Gaussian noise. For count-based observation models such as Poisson or negative-binomial sampling, equation~\eqref{eq:mean-residual} should instead be interpreted as a mean-plus-residual decomposition, where \(\varepsilon(t)\) denotes deviations from the conditional mean.
+
+Because convolution in the time domain corresponds to multiplication in the frequency domain, it is natural to examine the conditional mean spectrally. Taking Fourier transforms gives
+\begin{equation}
+\widehat m(f)
+=
+\widehat U(f)\widehat k(f)
+=
+p\,\widehat U(f)\widehat G(f),
 \label{eq:fourier-delay}
 \end{equation}
-where \(\widehat{X}(f)\) denotes the Fourier transform of \(X(t)\). When \(p=1\), equation~\eqref{eq:fourier-delay} reduces to the delay-only setting without conversion loss. This frequency-domain representation highlights the attenuating effect of delay processes: for many epidemiological delay distributions, the magnitude \(|\widehat{G}(f)|\) decreases with frequency, thereby attenuating high-frequency upstream variation before it reaches the downstream process \(D(t)\). This attenuation mechanism is illustrated in Fig~\ref{fig:intro}D--F.
+where \(\widehat X(f)\) denotes the Fourier transform of \(X(t)\). When \(p=1\), equation~\eqref{eq:fourier-delay} reduces to the delay-only setting without conversion loss. This frequency-domain representation highlights the attenuating effect of delay processes: for many epidemiological delay distributions, the magnitude \(|\widehat G(f)|\) decreases with frequency, thereby attenuating high-frequency upstream variation before it reaches the downstream mean. This attenuation mechanism is illustrated in Fig.~\ref{fig:intro}D--F.
 
-This framework extends naturally to multilayer delay structures in which several delay mechanisms act sequentially, such as incubation, testing, reporting, and hospitalization delays. Let $g_1,g_2,\ldots,g_L$ denote normalized delay kernels associated with successive stages, and let $p_1,p_2,\ldots,p_L$ denote the corresponding conversion rates. The overall conversion rate is
-$p_{\mathrm{tot}}=\prod_{\ell=1}^{L} p_\ell$, while the overall delay kernel is given by the convolution $g_{\mathrm{tot}}=g_1 * g_2 * \cdots * g_L$. The effective impulse response therefore becomes $h_{\mathrm{tot}}(\tau)=p_{\mathrm{tot}}\,g_{\mathrm{tot}}(\tau)$, and the downstream conditional mean satisfies
+This framework extends naturally to multilayer delay structures in which several delay mechanisms act sequentially, such as incubation, testing, reporting, and hospitalization delays. Let \(g_1,g_2,\ldots,g_L\) denote normalized delay kernels associated with successive stages, and let \(p_1,p_2,\ldots,p_L\) denote the corresponding conversion rates. The overall conversion rate is \(p_{\mathrm{tot}}=\prod_{\ell=1}^L p_\ell\), while the overall delay kernel is
 \[
-\mathbb{E}[D(t)\mid U]=(U*h_{\mathrm{tot}})(t).
+g_{\mathrm{tot}}=g_1*g_2*\cdots*g_L.
+\]
+The overall observation kernel is
+\[
+k_{\mathrm{tot}}(\tau)=p_{\mathrm{tot}}\,g_{\mathrm{tot}}(\tau),
+\]
+and the downstream conditional mean satisfies
+\[
+\mathbb E\{D(t)\mid U\}=(U*k_{\mathrm{tot}})(t).
 \]
 In the frequency domain, the corresponding transfer function factorizes as
-
 \begin{equation}
-\widehat H_{\mathrm{tot}}(f)
+\widehat k_{\mathrm{tot}}(f)
 =
-\prod_{\ell=1}^{L}p_\ell
-\prod_{\ell=1}^{L}\widehat G_\ell(f).
+\prod_{\ell=1}^L p_\ell
+\prod_{\ell=1}^L \widehat G_\ell(f).
 \end{equation}
 Thus, sequential delay mechanisms compound their spectral attenuation multiplicatively, progressively suppressing high-frequency upstream variation before it reaches the downstream process.
 
+\subsection*{Spectral separability of upstream trajectories}
 
-\subsection*{Frequency-Domain Criterion for Upstream Identifiability}
-
-We consider identifiability of the upstream process by asking whether two candidate trajectories \(U_0\) and \(U_1\) can be statistically distinguished based on the downstream observations. We pose the binary hypothesis test
-\begin{equation}
-H_0: U = U_0,
-\qquad
-H_1: U = U_1,
-\end{equation}
-Taking conditional expectations in \eqref{eq:fourier-delay} yields
-\begin{equation}
-\mathbb{E}[\widehat{D}(f)\mid H_i]=p\,\widehat{G}(f)\,\widehat{U}_i(f), \quad i\in\{0,1\}
-\end{equation}
-
-Hence, the frequency-wise difference of the expected downstream signals is
-\begin{equation}
-\Delta\widehat{D}(f)
-= p\,\widehat{G}(f)\,\bigl[\widehat{U}_0(f) - \widehat{U}_1(f)\bigr]
-\end{equation}
-
-To quantify the detectability of this contrast, we introduce
-\(N_{\mathcal M}(f)>0\) as an observation-model-specific effective noise scale, where \(\mathcal M\) denotes the observation model. Its precise interpretation depends on the likelihood.
-
-For additive stationary Gaussian noise, \(N_{\mathcal M}(f)=S_\varepsilon(f)\) is the noise spectral density, and the
-resulting weighted spectral distance corresponds directly to the Gaussian likelihood geometry. For independent observations under count models, the variance depends on the time-varying conditional mean and does not, in general, yield a frequency-wise diagonal likelihood. In those settings, we use conservative
-uniform variance bounds together with Parseval's identity to obtain a spectral upper bound on the Kullback--Leibler divergence. Thus, \(N_{\mathcal M}(f)\) should be interpreted generally as an effective likelihood-based noise scale, rather than a literal Fourier-domain variance under every observation model.
-
-As illustrated in Fig.~\ref{fig:intro}F, only the portion of upstream spectral contrast that remains after the observation process relative to the effective observation noise contributes to downstream distinguishability. Accordingly, we define the model-specific instantiation of the common separability
-functional as
-\begin{equation}
-\begin{aligned}
-J_{\mathcal M}(U_0,U_1)
-&=
-\int_{-\infty}^{\infty}
-\frac{|\Delta\widehat D(f)|^2}
-     {N_{\mathcal M}(f)}
-\,df
-\\[4pt]
-&=
-\int_{-\infty}^{\infty}
-w_{\mathcal M}(f)
-\left|
-\widehat U_1(f)-\widehat U_0(f)
-\right|^2df.
-\end{aligned}
-\label{eq:J-def}
-\end{equation}
-where
+We quantify upstream identifiability by asking whether two candidate upstream trajectories \(U_0\) and \(U_1\) could be distinguished from the downstream observations. The statistical scale for this comparison is set by the downstream likelihood, but the effect of delay is most transparent after expressing the resulting likelihood separability in spectral coordinates. Let
 \[
-w_{\mathcal M}(f)
-=
-\frac{|p\,\widehat G(f)|^2}{N_{\mathcal M}(f)}.
+H_0: U=U_0,
+\qquad
+H_1: U=U_1
+\]
+denote the two simple hypotheses, and let
+\[
+m_i(t)=(U_i*k)(t),
+\qquad i\in\{0,1\},
+\]
+be the corresponding downstream mean trajectories. Their observable contrast is
+\[
+\Delta m(t)=m_1(t)-m_0(t)=\{(U_1-U_0)*k\}(t).
 \]
 
-Because \(U(t)\), \(g(t)\), and the downstream process are real-valued, their Fourier transforms are conjugate symmetric, and the integrand in \eqref{eq:J-def} is even in frequency. Accordingly, all numerical spectral calculations throughout this paper use the equivalent one-sided representation over nonnegative frequencies, with the standard factor-of-two correction applied to interior positive-frequency components so that total spectral energy is preserved. Unless otherwise stated, all displayed spectra and spectral quantities are reported on this one-sided scale.
+On a finite observation window, let \(\mathbf F\) be the unitary discrete Fourier transform and let \(\mathcal K\) be the diagonal transfer operator with entries \(\widehat k(f_k)=p\widehat G(f_k)\). In the corresponding finite-window spectral representation,
+\[
+\Delta\mathbf m
+=
+\mathbf F^*
+\mathcal K
+\Delta\widehat{\mathbf U},
+\]
+where \(\Delta\widehat{\mathbf U}\) is the Fourier transform of \(U_1-U_0\). Let \(\mathcal M\) index the downstream observation model, and let \(\mathbf W_{\mathcal M}\) denote the likelihood weight induced by that observation model for the finite contrast between \(m_0\) and \(m_1\). This weight plays the role of observation precision: downstream contrasts in regions with greater observation variability receive smaller weight, and locally the weight reduces to inverse conditional variance. We define the spectral separability between \(U_0\) and \(U_1\) as the likelihood-weighted downstream contrast expressed in the upstream frequency domain,
+\begin{equation}
+J_{\mathcal M}(U_0,U_1)
+=
+\Delta\widehat{\mathbf U}^{*}
+\mathbf S_{\mathcal M}(U_0,U_1)
+\Delta\widehat{\mathbf U},
+\label{eq:J-spectral}
+\end{equation}
+with
+\begin{equation}
+\mathbf S_{\mathcal M}(U_0,U_1)
+=
+\mathcal K^{*}
+\mathbf F\mathbf W_{\mathcal M}(U_0,U_1)\mathbf F^{*}
+\mathcal K.
+\label{eq:S-operator}
+\end{equation}
+The transfer operator \(\mathcal K\) attenuates upstream variation according to the delay distribution and conversion probability. After transforming back to the observation window, \(\mathbf W_{\mathcal M}\) scores the resulting downstream mean contrast on the scale of observation variability specified by the observation model. Consequently, \(J_{\mathcal M}\) is small when upstream differences are concentrated at temporal scales suppressed by the delay kernel, or when the delay-filtered downstream differences are small on the observation-variability scale.
 
-The delay kernel therefore determines the common spectral geometry of the problem, whereas the observation model determines the effective noise scale entering \(w_{\mathcal M}(f)\). Consequently, the spectral weight \(w_{\mathcal M}(f)\) determines which frequency components contribute most to downstream distinguishability.
+The same quantity can be written on the downstream mean scale as
+\begin{equation}
+J_{\mathcal M}(U_0,U_1)
+=
+\Delta\mathbf m^*
+\mathbf W_{\mathcal M}(U_0,U_1)
+\Delta\mathbf m .
+\label{eq:J-time}
+\end{equation}
+Thus \(J_{\mathcal M}\) measures the part of the upstream spectral contrast that remains after delay filtering and is informative under the downstream observation model. \(\mathbf S_{\mathcal M}\) is a spectral operator that combines delay attenuation with the likelihood weight induced by the observation model. This form retains the intuition that identifiable upstream contrast must both survive delay filtering and remain large relative to observation variability. In special cases such as stationary Gaussian noise, the operator reduces to a frequency-by-frequency weight.
 
+\subsection*{Observation models and non-identifiability bound}
 
-\subsection*{Detectability Under Different Observation Models}
+We evaluated three observation models commonly used for epidemic surveillance data: additive Gaussian noise, Poisson counts, and negative-binomial counts. The corresponding likelihood weights are summarized in Table~\ref{tab:noise-models}; full derivations are given in Appendix~\ref{sec:Appendix_S1}. For Gaussian observations with common covariance \(\mathbf C_\varepsilon\), \(\mathbf W_{\mathrm G}=\mathbf C_\varepsilon^{-1}\). If the Gaussian noise is stationary, the Fourier basis diagonalizes this covariance and equation~\eqref{eq:J-spectral} becomes the familiar frequency-wise weighted contrast. For conditionally independent Poisson and negative-binomial counts, \(\mathbf W_{\mathcal M}\) is diagonal in time, with entries determined by the exact likelihood curvature between \(m_0(t)\) and \(m_1(t)\). The local approximations in Table~\ref{tab:noise-models} give the corresponding inverse-variance weights in the small-contrast limit.
 
-In the hypothesis-testing framework introduced above, the effective noise scale \(N(f)\) depends on the observation model. We therefore instantiate the separability framework for three commonly used observation models: additive Gaussian noise, Poisson counting noise, and negative-binomial counting noise. Although these models induce different variance structures, they all lead to likelihood-based bounds relating the separability functional \(J(U_0,U_1)\) to statistical distinguishability. Full derivations are provided in Appendix~\ref{sec:Appendix_S2}.
+With these likelihood-induced weights, the spectral separability in equation~\eqref{eq:J-spectral} is
+\begin{equation}
+J_{\mathcal M}(U_0,U_1)
+=
+2D_{\mathrm{KL}}
+\left(
+P_0^{\mathcal M}\Vert P_1^{\mathcal M}
+\right),
+\label{eq:J-KL}
+\end{equation}
+where \(P_i^{\mathcal M}\) is the distribution of the downstream observation vector implied by \(U_i\) under observation model \(\mathcal M\). This representation connects the spectral separability criterion to a likelihood-based testing bound.
 
 For any decision rule \(\phi\), define the total testing error
 \[
-R(\phi)
-=
-P_0(\phi=H_1)
-+
-P_1(\phi=H_0),
+R(\phi) = P_0(\phi=H_1)+P_1(\phi=H_0).
 \]
-where \(P_0\) and \(P_1\) denote probabilities under the two hypotheses defined above. 
-
-Likelihood-based arguments then imply that, for any target total testing error level \(\alpha\in(0,1)\), each observation model admits a corresponding likelihood-based sufficient condition for non-identifiability. When \(J(U_0,U_1)\) falls below this threshold, every statistical test satisfies
+For two simple hypotheses,
 \[
-\inf_{\phi} R(\phi)
-\ge
-\alpha,
+\inf_\phi R(\phi)=1-\lVert P_0-P_1\rVert_{\mathrm{TV}}.
 \]
-so \(U_0\) and \(U_1\) cannot be reliably distinguished from downstream observations alone. The resulting observation-model-specific quantities are summarized in Table~\ref{tab:noise-models}.
+Here, \(\lVert \cdot\rVert_{\mathrm{TV}}\) denotes the total variation distance. Combining equation~\eqref{eq:J-KL} with Pinsker's inequality gives
+\begin{equation}
+\inf_\phi R(\phi)
+\ge
+1-\frac12\sqrt{J_{\mathcal M}(U_0,U_1)}.
+\label{eq:testing-bound}
+\end{equation}
+Consequently, for any target total testing error level \(\alpha\in(0,1)\),
+\begin{equation}
+J_{\mathcal M}(U_0,U_1)
+\le
+4(1-\alpha)^2
+\quad\Longrightarrow\quad
+\inf_\phi R(\phi)\ge \alpha .
+\label{eq:nonidentifiability-threshold}
+\end{equation}
+When this condition holds, no statistical procedure can reliably distinguish the two upstream trajectories from the downstream observations alone at the specified error criterion.
 
 \begin{table*}[!t]
 \centering
-\caption{
-\textbf{Observation-model-specific normalizations and non-identifiability thresholds.}
-For a target total testing error level \(\alpha\in(0,1)\),
-non-identifiability is guaranteed whenever \(J(U_0,U_1)\) falls below
-the corresponding threshold. For count models,
-\(m_i(t)=p(U_i*g)(t)\) and
-\(0<m_{\min}\le m_i(t)\le m_{\max}\).
-For the negative-binomial model,
-\(V(m)=m+m^2/\kappa\) and \(V_{\min}=V(m_{\min})\).
-}
+\caption{ \textbf{Likelihood weights for downstream separability.} The separability can be written as \(J_{\mathcal M}=\Delta\mathbf m^*\mathbf W_{\mathcal M}\Delta\mathbf m\), where \(\Delta\mathbf m\) is the delay-filtered downstream contrast. For count models, \(m_s(t)=m_1(t)+s\{m_0(t)-m_1(t)\}\), \(0\le s\le1\). Local approximations apply when \(m_0(t)\) and \(m_1(t)\) are close to a common mean \(\bar m(t)\). }
 \label{tab:noise-models}
 \begin{tabular}{llll}
 \hline
@@ -145,38 +173,44 @@ Observation model
 &
 Variance structure
 &
-Normalization \(N(f)\)
+Likelihood weight
 &
-Non-identifiability threshold
+Local approximation
 \\
 \hline
 
 Gaussian
 &
-\(S_{\varepsilon}(f)\)
+\(\mathbf C_\varepsilon\)
 &
-\(S_{\varepsilon}(f)\)
+\(\mathbf W_{\mathrm G}=\mathbf C_\varepsilon^{-1}\)
 &
-\(\displaystyle 4(1-\alpha)^2\)
+\(1/S_\varepsilon(f_k)\) if stationary
 \\[8pt]
 
 Poisson
 &
-\(m(t)\)
+\(V_{\mathrm P}(m)=m\)
 &
-\(m_{\min}\)
+\(\displaystyle
+[\mathbf W_{\mathrm P}]_{tt}
+=2\int_0^1\frac{1-s}{m_s(t)}\,ds\)
 &
-\(\displaystyle 4(1-\alpha)^2\)
-\\[8pt]
+\(\displaystyle 1/\bar m(t)\)
+\\[10pt]
 
 Negative binomial
 &
-\(\displaystyle V(m)=m+\frac{m^2}{\kappa}\)
+\(\displaystyle V_{\mathrm{NB}}(m)=m+\frac{m^2}{\kappa}\)
 &
-\(V_{\min}\)
+\(\displaystyle
+[\mathbf W_{\mathrm{NB}}]_{tt}
+=2\int_0^1
+\frac{1-s}{m_s(t)+m_s(t)^2/\kappa}\,ds\)
 &
-\(\displaystyle 4(1-\alpha)^2\)
-\\[8pt]
+\(\displaystyle
+1/\{\bar m(t)+\bar m(t)^2/\kappa\}\)
+\\[10pt]
 
 \hline
 \end{tabular}
