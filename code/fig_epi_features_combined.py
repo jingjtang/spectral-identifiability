@@ -704,33 +704,33 @@ def plot_combined(payload, out_png, out_pdf):
             linespacing=0.9,
         )
 
-    fig.canvas.draw()
-    renderer = fig.canvas.get_renderer()
-
-    def ylabel_left(ax, fallback_ax=None):
-        label = ax.yaxis.get_label()
-        if label.get_text():
-            bbox = label.get_window_extent(renderer).transformed(fig.transFigure.inverted())
-            return bbox.x0
-        fallback = fallback_ax if fallback_ax is not None else ax
-        return fallback.get_position().x0 - 0.030
-
-    panel_label_x = {
-        axA: ylabel_left(axA),
-        axB: ylabel_left(axB),
-        axC: ylabel_left(axC),
-        axD: ylabel_left(axD),
-        axE: ylabel_left(axE),
-        axF: ylabel_left(axF),
-        axG: ylabel_left(axG),
-        axH_title: ylabel_left(axE),
+    panel_label_pad_x = 0.034
+    panel_label_pad_y = 0.024
+    panel_label_x_by_col = {
+        "left": axA.get_position().x0 - panel_label_pad_x,
+        "middle": axB.get_position().x0 - panel_label_pad_x,
+        "right": axC.get_position().x0 - panel_label_pad_x,
+        "h": axH_left.get_position().x0 - panel_label_pad_x,
     }
-    for ax, label in zip([axA, axB, axC, axD, axE, axF, axG, axH_title], "ABCDEFGH"):
-        bbox = ax.get_position()
-        label_y = axG.get_position().y1 + 0.022 if ax is axH_title else bbox.y1 + 0.022
+    panel_label_y_by_row = {
+        "top": axA.get_position().y1 + panel_label_pad_y,
+        "middle": axD.get_position().y1 + panel_label_pad_y,
+        "bottom": axG.get_position().y1 + panel_label_pad_y,
+    }
+    panel_label_specs = [
+        (axA, "A", "left", "top"),
+        (axB, "B", "middle", "top"),
+        (axC, "C", "right", "top"),
+        (axD, "D", "left", "middle"),
+        (axE, "E", "middle", "middle"),
+        (axF, "F", "right", "middle"),
+        (axG, "G", "left", "bottom"),
+        (axH_title, "H", "h", "bottom"),
+    ]
+    for _ax, label, col_key, row_key in panel_label_specs:
         fig.text(
-            panel_label_x[ax],
-            label_y,
+            panel_label_x_by_col[col_key],
+            panel_label_y_by_row[row_key],
             label,
             fontsize=10.5,
             fontweight="bold",
